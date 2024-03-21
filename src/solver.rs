@@ -6,6 +6,7 @@
 
 use std::cmp::Ordering;
 use std::collections::hash_map::DefaultHasher;
+use std::collections::HashMap;
 use std::fmt::Formatter;
 use std::hash::Hasher;
 
@@ -119,40 +120,62 @@ impl Ord for Force2D {
 impl Force2D {
     fn x(&self) -> VectorComponent {
         match &self.magnitude {
-            VectorComponent::KnownExactly(val) => VectorComponent::KnownExactly(val * self.direction.x),
+            VectorComponent::KnownExactly(val) => {
+                VectorComponent::KnownExactly(val * self.direction.x)
+            }
             _ => VectorComponent::Unknown,
         }
     }
     fn y(&self) -> VectorComponent {
         match &self.magnitude {
-            VectorComponent::KnownExactly(val) => VectorComponent::KnownExactly(val * self.direction.y),
+            VectorComponent::KnownExactly(val) => {
+                VectorComponent::KnownExactly(val * self.direction.y)
+            }
             _ => VectorComponent::Unknown,
         }
     }
 }
 
-
 #[warn(incomplete_features)]
 #[allow(unused)]
 fn build_equations(forces: &[Force2D], template: &[SolverID]) -> Result<[Vec<f64>; 2], ()> {
     // TODO: Validation, and / or make sure it happens before here
-    
-    // TODO: how to ensure the matrix rows are build in the same order that the template has?
-    let mut forces = forces.to_vec();
-    forces.sort();
-    
+
+    let mut keys: HashMap<SolverID, usize> = {
+        let mut map = HashMap::new();
+        for (index, id) in template.iter().enumerate() {
+            map.insert(*id, index);
+        }
+        map
+    };
+
     // TODO: Proof of concept, bc we store the magnitude & direction, its easy to build matrix
     //  coefficients bc the coefficient is just the magnitude info
-    let mut x_coefficients: Vec<f64> = Vec::with_capacity(template.len());
+    let mut x_coefficients: Vec<f64> = vec![0f64; template.len()];
     let mut x_sum = 0f64;
+
     for force in forces {
         if let VectorComponent::KnownExactly(val) = force.magnitude {
             x_sum += val * force.direction.x;
             continue;
         }
-        
-        x_coefficients.push(force.direction.x);
+        // TODO: this error handling
+        x_coefficients[*keys.get(&force.id).unwrap()] = force.direction.x;
     }
-    
-    todo!()
+    x_coefficients.push(-1.0 * x_sum); // This is the const for the result vector in the matrix equation
+
+    let mut y_coefficients: Vec<f64> = vec![0f64; template.len()];
+    let mut y_sum = 0f64;
+
+    for force in forces {
+        if let VectorComponent::KnownExactly(val) = force.magnitude {
+            y_sum += val * force.direction.y;
+            continue;
+        }
+        // TODO: this error handling
+        y_coefficients[*keys.get(&force.id).unwrap()] = force.direction.y;
+    }
+    y_coefficients.push(-1.0 * y_sum);
+
+    Ok([x_coefficients, y_coefficients])
 }

@@ -1,6 +1,6 @@
 /* Order / flow for parsing to/from documents:
-This program will solve a general truss given in a specific file format. It is restricted to 
-trusses with their loads and supports in the same plane as the truss itself. 
+This program will solve a general truss given in a specific file format. It is restricted to
+trusses with their loads and supports in the same plane as the truss itself.
 
 1) The problem starts as a file with the following defined (either absolute or relative):
   > All relevant points (either absolute or relative)
@@ -15,7 +15,7 @@ trusses with their loads and supports in the same plane as the truss itself.
   > There are no duplicate points (e.g. if two things are at the same point, they have the same point ID)
 3) A list of all applicable loads for each point is created
   > Contains support reactions, internal forces, and external loads
-  > 
+  >
 
 3) A list of all loads, support reactions, and internal forces is created for each point
   > Each force has a unique ID and is associated to a specific point
