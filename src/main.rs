@@ -6,6 +6,7 @@ fn main() {
     println!("Hello, World!");
 }
 
+#[allow(unused)]
 fn ask_for_file() -> Option<String> {
     println!("Statics Truss Solver | ENGR 2120H");
     println!("Please enter a file name (relative to this directory):");
