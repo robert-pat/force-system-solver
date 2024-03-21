@@ -1,102 +1,84 @@
 #![allow(unused)]
 
 /*In the solver, here are the goals:
-1) All points have been determined, the only unknown is the magnitude of the loads on the system.
-2) All of the loads have been resolved as much as possible, e.g. minimum unknowns
-3) Everything (point, force, couple moment) has an id to refer to other things
+    TODO: goals & expectations + update the README
 */
 
+use std::cmp::Ordering;
+use std::collections::hash_map::DefaultHasher;
 use std::fmt::Formatter;
+use std::hash::Hasher;
 
-/// Chunk of a statics problem that can be solved by applying equations of equilibrium.
-/// These hold forces, couple moments, and points that this body includes; all of its unknowns can be found
-/// by applying equations of equilibrium:
-///
-///   ΣF_x = 0   ΣF_y = 0   ΣF_z = 0  &  ΣM_(any point) = 0
-///
-/// This gets converted into a matrix equation that gets solved by {LINEAR_ALGEBRA_LIBRARY}
-pub(crate) struct RigidBody {
-    points: Vec<Point3D>,
-    forces: Vec<Force3D>,
-    moments: Vec<CoupleMoment3D>,
-    // TODO: what does this struct need to hold?
-}
-impl RigidBody {
-    /* TODO: Write the solver function here:
-        - Need to find an appropriate linear algebra library
-        - Need to set up the matrix w/ appropriate numbers of equations
-        - Need to input values from those equations into the matrix
-    */
-    pub(crate) fn has_point(&self, point: &Point3D) -> bool {
-        self.points.contains(point)
-    }
-    pub(crate) fn count_unknowns(&self) -> u32 {
-        let mut count = 0;
-        for force in &self.forces {
-            for comp in [&force.x_i, &force.y_j, &force.z_k] {
-                if !matches!(comp, VectorComponent::KnownExactly(_)) {
-                    count += 1;
-                }
-            }
-        }
-        for moment in &self.moments {
-            for comp in [&moment.x_i, &moment.y_j, &moment.z_k] {
-                if !matches!(comp, VectorComponent::KnownExactly(_)) {
-                    count += 1;
-                }
-            }
-        }
-        count
-    }
-}
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
 struct SolverID(u64);
+impl PartialOrd for SolverID {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.0.cmp(&other.0))
+    }
+}
+impl Ord for SolverID {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.0.cmp(&other.0)
+    }
+}
+impl SolverID {
+    pub(crate) fn new(label: &str) -> Self {
+        let mut h = DefaultHasher::new();
+        h.write(label.as_bytes());
+        SolverID(h.finish())
+    }
+    pub(crate) fn from_data(data: &[u8]) -> Self {
+        let mut h = DefaultHasher::new();
+        h.write(data);
+        SolverID(h.finish())
+    }
+}
 impl std::fmt::Display for SolverID {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "#{}", self.0)
     }
 }
 #[derive(Clone, Debug)]
-pub(crate) struct Point3D {
+pub(crate) struct Point2D {
     x: f64,
     y: f64,
-    z: f64,
     id: SolverID,
 }
-impl PartialEq for Point3D {
+impl Point2D {
+    pub(crate) fn direction_to(other: &Point2D) -> Direction2D {
+        todo!()
+    }
+}
+impl PartialEq for Point2D {
     fn eq(&self, other: &Self) -> bool {
-        for (x, y) in [(self.x, other.x), (self.y, other.y), (self.z, other.z)] {
-            if x.is_normal() && y.is_normal() {
-                assert_eq!(
-                    x, y,
-                    "Points {} and {} disagreed on a coordinate: {x} and {y}",
-                    self.id, other.id
-                );
-            }
-        }
         self.id == other.id
     }
 }
-impl Eq for Point3D {
+impl Eq for Point2D {
     fn assert_receiver_is_total_eq(&self) {}
 }
-pub(crate) struct Force3D {
-    x_i: VectorComponent,
-    y_j: VectorComponent,
-    z_k: VectorComponent,
-    origin: Point3D,
-    id: SolverID,
+
+/// Represents a unit vector in two dimensions. Because the vector's length is 1,
+/// this is effectively just a direction
+#[derive(Debug, Copy, Clone)]
+pub(crate) struct Direction2D {
+    x: f64,
+    y: f64,
 }
-pub(crate) struct CoupleMoment3D {
-    x_i: VectorComponent,
-    y_j: VectorComponent,
-    z_k: VectorComponent,
-    id: SolverID,
-}
+
+/// Represents a real number. Currently, this is a wrapper for the
+/// f64 type, with some added code to deal with NaN, infinity, ect.
+/// The goal for this solver is to be accurate, so this is a temporary measure
+/// in the case that floats prove too finicky (NOT Currently Used--Planned Future)
+#[allow(unused)]
+#[derive(Debug, Copy, Clone)]
+pub(crate) struct Number(f64);
+
 /// Represents one component of a vector, along any axis.
 ///
 /// This may be a known or unknown value and may have information about whether it is
-/// positive or negative
+/// positive or negative. Vector components that are known positive or negative have additional
+/// information about their direction, while fully unknown components have no additional info.
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum VectorComponent {
     /// This component of the vector is unknown and may be positive or negative
@@ -108,28 +90,69 @@ pub(crate) enum VectorComponent {
     /// This component of the vector is known to have the value contained
     KnownExactly(f64),
 }
-impl VectorComponent {
-    fn make_exact_safe(value: f64) -> Option<Self> {
-        if value.is_normal() {
-            Some(VectorComponent::KnownExactly(value))
-        } else {
-            None
-        }
-    }
+
+#[derive(Clone)]
+pub(crate) struct Force2D {
+    magnitude: VectorComponent,
+    direction: Direction2D,
+    point: Point2D,
+    id: SolverID,
 }
-impl PartialEq for VectorComponent {
+impl PartialEq for Force2D {
     fn eq(&self, other: &Self) -> bool {
-        if let VectorComponent::KnownExactly(v1) = self {
-            if !v1.is_normal() {
-                panic!("Floating-point error in the length of a vector component {v1}! (Tried to compare components)");
-            }
-            if let VectorComponent::KnownExactly(v2) = other {
-                return v1 == v2;
-            }
-        }
-        matches!(self, other)
+        self.id == other.id
     }
 }
-impl Eq for VectorComponent {
+impl Eq for Force2D {
     fn assert_receiver_is_total_eq(&self) {}
+}
+impl PartialOrd for Force2D {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.id.cmp(&other.id))
+    }
+}
+impl Ord for Force2D {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.id.cmp(&other.id)
+    }
+}
+impl Force2D {
+    fn x(&self) -> VectorComponent {
+        match &self.magnitude {
+            VectorComponent::KnownExactly(val) => VectorComponent::KnownExactly(val * self.direction.x),
+            _ => VectorComponent::Unknown,
+        }
+    }
+    fn y(&self) -> VectorComponent {
+        match &self.magnitude {
+            VectorComponent::KnownExactly(val) => VectorComponent::KnownExactly(val * self.direction.y),
+            _ => VectorComponent::Unknown,
+        }
+    }
+}
+
+
+#[warn(incomplete_features)]
+#[allow(unused)]
+fn build_equations(forces: &[Force2D], template: &[SolverID]) -> Result<[Vec<f64>; 2], ()> {
+    // TODO: Validation, and / or make sure it happens before here
+    
+    // TODO: how to ensure the matrix rows are build in the same order that the template has?
+    let mut forces = forces.to_vec();
+    forces.sort();
+    
+    // TODO: Proof of concept, bc we store the magnitude & direction, its easy to build matrix
+    //  coefficients bc the coefficient is just the magnitude info
+    let mut x_coefficients: Vec<f64> = Vec::with_capacity(template.len());
+    let mut x_sum = 0f64;
+    for force in forces {
+        if let VectorComponent::KnownExactly(val) = force.magnitude {
+            x_sum += val * force.direction.x;
+            continue;
+        }
+        
+        x_coefficients.push(force.direction.x);
+    }
+    
+    todo!()
 }
