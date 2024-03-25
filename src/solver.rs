@@ -1,16 +1,16 @@
 #![allow(unused)]
 
-/*In the solver, here are the goals:
+/* Solver expectations & solving strategy:
     TODO: goals & expectations + update the README
 */
 
 use std::cmp::Ordering;
 use std::collections::hash_map::DefaultHasher;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt::Formatter;
 use std::hash::Hasher;
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 struct SolverID(u64);
 impl PartialOrd for SolverID {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
@@ -59,12 +59,27 @@ impl Eq for Point2D {
     fn assert_receiver_is_total_eq(&self) {}
 }
 
-/// Represents a unit vector in two dimensions. Because the vector's length is 1,
-/// this is effectively just a direction
+/// Represents a unit vector in two dimensions. Because the length is always 1, x and y components
+/// of a given vector can always be found by multiplying the vector's magnitude with the x or y
+/// of this direction.
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct Direction2D {
     x: f64,
     y: f64,
+}
+impl Direction2D {
+    fn is_valid(&self) -> bool {
+        self.x.is_normal()
+            && self.y.is_normal()
+            && (self.x.powf(2.0) + self.y.powf(2.0)).sqrt() == 1f64
+    }
+}
+impl PartialEq for Direction2D {
+    fn eq(&self, other: &Self) -> bool {
+        // technically because these should always have their magnitude at 1, comparing both
+        // is unnecessary I think.
+        self.x == other.x && self.y == other.y
+    }
 }
 
 /// Represents a real number. Currently, this is a wrapper for the
@@ -99,24 +114,6 @@ pub(crate) struct Force2D {
     point: Point2D,
     id: SolverID,
 }
-impl PartialEq for Force2D {
-    fn eq(&self, other: &Self) -> bool {
-        self.id == other.id
-    }
-}
-impl Eq for Force2D {
-    fn assert_receiver_is_total_eq(&self) {}
-}
-impl PartialOrd for Force2D {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.id.cmp(&other.id))
-    }
-}
-impl Ord for Force2D {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.id.cmp(&other.id)
-    }
-}
 impl Force2D {
     fn x(&self) -> VectorComponent {
         match &self.magnitude {
@@ -136,46 +133,68 @@ impl Force2D {
     }
 }
 
+/// Takes in a set of forces and a template for what order the row vector should be constructed in.
+/// The function then creates two row vectors representing the net force equations for the forces
+/// in the x and y directions. The last item in each vector is the result of the equation (C) in
+/// A * x_1 + B * x_2 + ... = C.
+///
+/// All of the forces passed in should be acting at the same point / be from the same joint.
+/// The rows only contain the coefficients
 #[warn(incomplete_features)]
 #[allow(unused)]
 fn build_equations(forces: &[Force2D], template: &[SolverID]) -> Result<[Vec<f64>; 2], ()> {
-    // TODO: Validation, and / or make sure it happens before here
+    if forces.is_empty() || template.is_empty() {
+        return Err(());
+    }
+    let point = forces[0].point.clone();
+    if forces.iter().any(|f| f.point != point) {
+        return Err(());
+    }
+    if forces.iter().any(|f| !template.contains(&f.id)) {
+        return Err(());
+    }
 
-    let mut keys: HashMap<SolverID, usize> = {
-        let mut map = HashMap::new();
+    let mut keys: BTreeMap<SolverID, usize> = {
+        let mut map = BTreeMap::new();
         for (index, id) in template.iter().enumerate() {
             map.insert(*id, index);
         }
         map
     };
-
-    // TODO: Proof of concept, bc we store the magnitude & direction, its easy to build matrix
-    //  coefficients bc the coefficient is just the magnitude info
-    let mut x_coefficients: Vec<f64> = vec![0f64; template.len()];
-    let mut x_sum = 0f64;
+    
+    let (mut x_coefficients, mut y_coefficients) = (
+        vec![0f64; template.len()],
+        vec![0f64; template.len()],
+    );
+    let (mut x_sum, mut y_sum) = (0f64, 0f64);
 
     for force in forces {
         if let VectorComponent::KnownExactly(val) = force.magnitude {
             x_sum += val * force.direction.x;
-            continue;
-        }
-        // TODO: this error handling
-        x_coefficients[*keys.get(&force.id).unwrap()] = force.direction.x;
-    }
-    x_coefficients.push(-1.0 * x_sum); // This is the const for the result vector in the matrix equation
-
-    let mut y_coefficients: Vec<f64> = vec![0f64; template.len()];
-    let mut y_sum = 0f64;
-
-    for force in forces {
-        if let VectorComponent::KnownExactly(val) = force.magnitude {
             y_sum += val * force.direction.y;
             continue;
         }
-        // TODO: this error handling
-        y_coefficients[*keys.get(&force.id).unwrap()] = force.direction.y;
+        
+        let key = *keys.get(&force.id).unwrap();
+        x_coefficients[key] = force.direction.x;
+        y_coefficients[key] = force.direction.y;
     }
+
+    // This is the constant part of the linear equation. In matrix form, it's the value of this row
+    // of C in A*B = C. Multiply by -1 bc net force equations are of the form: (sum of things) = 0
+    // not (coefficient * variable(s)) = constant
+    x_coefficients.push(-1.0 * x_sum);
     y_coefficients.push(-1.0 * y_sum);
 
     Ok([x_coefficients, y_coefficients])
+}
+
+struct TrussJoint2D {
+    point: Point2D,
+    id: SolverID,
+    forces: Vec<Force2D>,
+}
+
+fn solve_joints(joints: &Vec<TrussJoint2D>) -> (){
+    
 }
