@@ -77,14 +77,6 @@ impl PartialEq for Direction2D {
     }
 }
 
-/// Represents a real number. Currently, this is a wrapper for the
-/// f64 type, with some added code to deal with NaN, infinity, ect.
-/// The goal for this solver is to be accurate, so this is a temporary measure
-/// in the case that floats prove too finicky (NOT Currently Used--Planned Future)
-#[allow(unused)]
-#[derive(Debug, Copy, Clone)]
-pub(crate) struct Number(f64);
-
 /// Represents one component of a vector, along any axis.
 ///
 /// This may be a known or unknown value and may have information about whether it is
@@ -109,24 +101,6 @@ pub(crate) struct Force2D {
     point: Point2D,
     id: SolverID,
 }
-impl Force2D {
-    fn x(&self) -> VectorComponent {
-        match &self.magnitude {
-            VectorComponent::KnownExactly(val) => {
-                VectorComponent::KnownExactly(val * self.direction.x)
-            }
-            _ => VectorComponent::Unknown,
-        }
-    }
-    fn y(&self) -> VectorComponent {
-        match &self.magnitude {
-            VectorComponent::KnownExactly(val) => {
-                VectorComponent::KnownExactly(val * self.direction.y)
-            }
-            _ => VectorComponent::Unknown,
-        }
-    }
-}
 
 /// Takes in a set of forces and a template for what order the row vector should be constructed in.
 /// The function then creates two row vectors representing the net force equations for the forces
@@ -139,7 +113,7 @@ impl Force2D {
 #[allow(unused)]
 fn get_rows_from_joint(
     forces: &[Force2D],
-    template: &[SolverID],
+    template: &[SolverID], //TODO: should this be changed to &BTreeMap<SolverID, usize> ?
 ) -> Result<(Vec<f64>, Vec<f64>), ()> {
     if forces.is_empty() || template.is_empty() {
         return Err(());
@@ -190,30 +164,35 @@ struct TrussJoint2D {
     forces: Vec<Force2D>,
 }
 
-fn count_unknowns(joints: &Vec<TrussJoint2D>) -> usize {
+fn find_unknowns(joints: &Vec<TrussJoint2D>) -> Vec<SolverID> {
     let mut set = BTreeSet::new();
     for joint in joints {
         for force in &joint.forces {
             set.insert(force.id);
         }
     }
-    set.len()
+    let mut unknowns = set.into_iter().collect::<Vec<_>>();
+    unknowns.sort();
+    unknowns
 }
 
 fn solve_truss(joints: &Vec<TrussJoint2D>) -> () {
-    let num_unknowns = count_unknowns(joints);
+    let unknowns = find_unknowns(joints);
+    let num_unknowns = unknowns.len();
     if num_unknowns > joints.len() * 2 {
         todo!()
     };
 
-    let order = [SolverID::new("1")]; // TODO
+    // TODO: we can't just use any equations arbitrarily:
+    //  The matrix needs to have at least one (maybe more?) of each unknown in it
+    //  e.g. no unknown can have a zero column vector for its place in the matrix
     let mut coefficient_elems = Vec::new();
     let mut others: Vec<f64> = Vec::new();
 
     for joint in joints {
         //TODO: make sure after popping these are the right len for when we make the matrix
 
-        let (mut x, mut y) = get_rows_from_joint(&joint.forces, &order).unwrap();
+        let (mut x, mut y) = get_rows_from_joint(&joint.forces, &unknowns).unwrap();
         others.push(x.pop().unwrap());
         others.push(y.pop().unwrap());
 
