@@ -12,7 +12,10 @@ This project is in alpha & I will be changing these requirements a LOT. Right no
 ### Research on other programs / structure:
 - Def need to use Matrices--could use my WIP library, but I'd rather just use an existing proven one
 - 
-
+### Solver Expectations & Solving Strategy:
+The solver in this project mainly works by using the Method of Joints to create a series of linear equations from the
+free-body diagrams of each joint in the truss. These equations are then combined into a matrix which is solved using matrix
+algebra (matrix multiplication). The solver also performs some optimizations before the full matrix is constructed.
 
 ## Building / Running this project
 When there is a working build, I will add it to the releases on the GitHub sidebar. If you are on an x86-64 Windows device, you can download and run the executable. Until then (or if you are on a different platform) you will need to build from source:
