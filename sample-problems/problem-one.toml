@@ -25,6 +25,4 @@ loads = [
     ["B", 25, "Up"],
 ]
 
-# supports must be one of:
-#
 supports = []
