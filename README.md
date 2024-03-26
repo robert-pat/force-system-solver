@@ -1,4 +1,4 @@
-# ENGR 2120H- Honors Project
+# ENGR 2120H: Honors Project
 This is my submission for the Spring 2024 ENGR 2120H honors project: a Rust program to analyse a 2D truss 
 and solve for the force each member is under. This project will read in a file (either opened in the program 
 or passed in via the command line) and then attempt to solve the force system as best it can. This is 
@@ -27,3 +27,5 @@ When there is a working build, I will add it to the releases on the GitHub sideb
     - Linux: do whatever makes ```cargo build``` work; you're on your own
 4) Once you have everything installed (check by running ```cargo build``` in a terminal), you can download the source code,
 navigate into the folder and run ```cargo run``` to run the program.
+
+### Creating a TOML file to solve a program

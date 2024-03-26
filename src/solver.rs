@@ -11,7 +11,7 @@ use std::hash::Hasher;
 use std::ops::Mul;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
-struct SolverID(u64);
+pub struct SolverID(u64);
 impl PartialOrd for SolverID {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.0.cmp(&other.0))
@@ -39,11 +39,39 @@ impl std::fmt::Display for SolverID {
         write!(f, "#{}", self.0)
     }
 }
+impl TryFrom<&toml::Value> for SolverID {
+    type Error = ();
+    fn try_from(value: &toml::Value) -> Result<Self, Self::Error> {
+        if let toml::Value::String(s) = value {
+            return Ok(SolverID::new(s));
+        }
+        Err(())
+    }
+}
 #[derive(Clone, Debug)]
 pub(crate) struct Point2D {
     x: f64,
     y: f64,
     id: SolverID,
+}
+impl Point2D {
+    pub(crate) fn origin(id: SolverID) -> Self {
+        Self {
+            id,
+            x: 0f64,
+            y: 0f64,
+        }
+    }
+    pub(crate) fn polar(id: SolverID, r: f64, theta: f64) -> Self {
+        Self {
+            id,
+            x: r * theta.to_radians().cos(),
+            y: r * theta.to_radians().sin(),
+        }
+    }
+    pub(crate) fn cartesian(id: SolverID, x: f64, y: f64) -> Self {
+        Self { id, x, y }
+    }
 }
 impl PartialEq for Point2D {
     fn eq(&self, other: &Self) -> bool {
@@ -101,6 +129,16 @@ pub(crate) struct Force2D {
     point: Point2D,
     id: SolverID,
 }
+impl Force2D {
+    pub(crate) fn new(id: SolverID, p: Point2D, dir: Direction2D, mag: VectorComponent) -> Self {
+        Self {
+            id,
+            point: p,
+            magnitude: mag,
+            direction: dir,
+        }
+    }
+}
 
 /// Takes in a set of forces and a template for what order the row vector should be constructed in.
 /// The function then creates two row vectors representing the net force equations for the forces
@@ -111,7 +149,7 @@ pub(crate) struct Force2D {
 /// The rows only contain the coefficients
 #[warn(incomplete_features)]
 #[allow(unused)]
-fn get_rows_from_joint(
+pub(crate) fn get_rows_from_joint(
     forces: &[Force2D],
     template: &[SolverID], //TODO: should this be changed to &BTreeMap<SolverID, usize> ?
 ) -> Result<(Vec<f64>, Vec<f64>), ()> {
@@ -163,6 +201,14 @@ struct TrussJoint2D {
     point: Point2D,
     forces: Vec<Force2D>,
 }
+impl TrussJoint2D {
+    pub(crate) fn new(p: Point2D, forces: Vec<Force2D>) -> Option<Self> {
+        if forces.iter().any(|f| f.point != p) {
+            return None;
+        }
+        Some(Self { point: p, forces })
+    }
+}
 
 fn find_unknowns(joints: &Vec<TrussJoint2D>) -> Vec<SolverID> {
     let mut set = BTreeSet::new();
@@ -176,32 +222,39 @@ fn find_unknowns(joints: &Vec<TrussJoint2D>) -> Vec<SolverID> {
     unknowns
 }
 
-fn solve_truss(joints: &Vec<TrussJoint2D>) -> () {
+fn solve_truss(joints: &Vec<TrussJoint2D>) -> Result<Vec<(SolverID, f64)>, ()> {
     let unknowns = find_unknowns(joints);
     let num_unknowns = unknowns.len();
     if num_unknowns > joints.len() * 2 {
+        // The solution can't be fully constrained
         todo!()
     };
 
     // TODO: we can't just use any equations arbitrarily:
     //  The matrix needs to have at least one (maybe more?) of each unknown in it
     //  e.g. no unknown can have a zero column vector for its place in the matrix
-    let mut coefficient_elems = Vec::new();
-    let mut others: Vec<f64> = Vec::new();
+    //
+    let mut coefficients = Vec::new();
+    let mut constants: Vec<f64> = Vec::new();
 
     for joint in joints {
-        //TODO: make sure after popping these are the right len for when we make the matrix
-
         let (mut x, mut y) = get_rows_from_joint(&joint.forces, &unknowns).unwrap();
-        others.push(x.pop().unwrap());
-        others.push(y.pop().unwrap());
 
-        coefficient_elems.extend(x);
-        coefficient_elems.extend(y);
+        assert_eq!(x.len(), num_unknowns + 1); // TODO: maybe should not just assert?
+        assert_eq!(y.len(), num_unknowns + 1);
+
+        constants.push(x.pop().unwrap());
+        constants.push(y.pop().unwrap());
+
+        coefficients.extend(x);
+        coefficients.extend(y);
     }
 
-    let mut m = na::DMatrix::from_row_slice(num_unknowns, num_unknowns, &coefficient_elems);
-    let mut b = na::DMatrix::from_column_slice(num_unknowns, 1, &others);
+    assert_eq!(coefficients.len(), num_unknowns.pow(2));
+    assert_eq!(constants.len(), num_unknowns);
+
+    let mut m = na::DMatrix::from_row_slice(num_unknowns, num_unknowns, &coefficients);
+    let mut b = na::DMatrix::from_column_slice(num_unknowns, 1, &constants);
 
     let inverse = match m.try_inverse() {
         Some(i) => i,
@@ -209,5 +262,8 @@ fn solve_truss(joints: &Vec<TrussJoint2D>) -> () {
     };
 
     let answers = inverse * b;
-    todo!()
+    Ok(unknowns
+        .into_iter()
+        .zip(answers.iter().copied())
+        .collect::<Vec<_>>())
 }
