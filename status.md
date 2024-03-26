@@ -1,4 +1,4 @@
-To Do List:
+To-do List (In no particular order):
 1) Finalize how points are described
 2) Design error system for the parser
 3) Finish the format for problems in the TOML
@@ -10,6 +10,8 @@ To Do List:
 9) Avoid using dependent equations in the matrix
 10) Recover from a singular matrix
 11) Ensure that each unknown appears in at least one equation
+12) Validate input TOML files before parsing begins
+13) get rid of the block comment in parsing.rs and put in the README (or other document)
 
 
 In the future:
@@ -17,3 +19,6 @@ In the future:
 - Move panics + eprintln!() to the error type
 - Good feedback / error messages for processing programs
 - program startup / user experience
+- recover from unnecessary info missing (e.g. nothing for weight defined) with defaults
+- write a good README
+- prep this to be an actual git repo
