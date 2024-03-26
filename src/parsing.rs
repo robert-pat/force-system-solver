@@ -38,10 +38,12 @@ TODO: finished writing this:
   > The names / order is the same as the input file
 */
 use crate::solver;
+use crate::solver::SolverID;
+use std::collections::BTreeSet;
+use std::slice::Iter;
 use toml::{Table, Value};
 
-#[warn(incomplete_features)]
-fn _string(value: &Value) -> &str {
+fn value_to_string(value: &Value) -> &str {
     if let Value::String(s) = value {
         return s;
     }
@@ -52,75 +54,135 @@ fn _string(value: &Value) -> &str {
     );
     panic!("Invalid type, see above error");
 }
-#[warn(incomplete_features)]
-fn _double(value: &Value) -> f64 {
-    if let Value::Float(s) = value {
-        return *s;
+
+macro_rules! toml_to_float {
+    ($x: expr) => {
+        match x.next()
+        Some(Value::Float(f)) => *f,
+        Some(val) => {
+            eprintln!("Invalid coordinates for point \'{point_name}\'!");
+            eprintln!("Expected a toml::Value::Float, but saw {:?} instead.", val);
+            panic!("Error! see above.");
+        }
+        None => {
+            eprintln!("Missing Coordinates for Point \'{point_name}\'!");
+            eprintln!("Expected two decimals for the point's position, saw nothing.");
+            panic!("Error! see above.");
+        }
     }
-    eprintln!("Can not convert non-floating point value to f64!");
+}
+fn to_f64_pair(mut value: Iter<Value>, point_name: &str) -> (f64, f64) {
+    // TODO: This macro is only inside this function bc I'm not 100% confident with it yet
+    let a = match value.next() {
+        Some(Value::Float(f)) => *f,
+        Some(val) => {
+            eprintln!("Invalid coordinates for point \'{point_name}\'!");
+            eprintln!("Expected a toml::Value::Float, but saw {:?} instead.", val);
+            panic!("Error! see above.");
+        }
+        None => {
+            eprintln!("Missing Coordinates for Point \'{point_name}\'!");
+            eprintln!("Expected two decimals for the point's position, saw nothing.");
+            panic!("Error! see above.");
+        }
+    };
+    let b = match value.next() {
+        Some(Value::Float(f)) => *f,
+        Some(val) => {
+            eprintln!("Invalid coordinates for point \'{point_name}\'!");
+            eprintln!("Expected a toml::Value::Float, but saw {:?} instead.", val);
+            panic!("Error! see above.");
+        }
+        None => {
+            eprintln!("Missing Coordinates for Point \'{point_name}\'!");
+            eprintln!("Expected two decimals for the point's position, saw nothing.");
+            panic!("Error! see above.");
+        }
+    };
+    if value.len() != 0 {
+        eprintln!("Warning, Point declarations should end with 2 coordinates only!");
+        eprintln!(
+            "Saw a coordinate pair with {} extra items, should be 0!",
+            value.len()
+        );
+        eprintln!(
+            "Expected: \"{a}\", \"{b}\" but Saw: \"{a}\", \"{b}\", \"{}\"... <- Extra!",
+            value.next().unwrap()
+        );
+    }
+    (a, b)
+}
+fn value_to_array(value: &Value) -> &Vec<Value> {
+    if let Value::Array(a) = value {
+        return a;
+    }
+    eprintln!("Can not convert non-array type into array!");
     eprintln!(
-        "Expected to find a toml::Value::Float, but saw \'{:?}\' instead",
+        "Expected to find a toml::Value::Array, but saw \'{:?}\' instead.",
         value
     );
-    panic!("Invalid type, see above error");
+    eprintln!("Unable to unwrap into an array.");
+    panic!("Invalid Type, see above!");
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum DuplicatePointType {
+    Origin,
+    Name,
+    Location,
+}
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum MalformedPointType {
+    InvalidName,
+    IncorrectLength,
+}
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum PointsParsingError {
+    Duplicate(DuplicatePointType),
+    Malformed(MalformedPointType),
 }
 /// Takes in a toml::Value::Array and parses it into an array of Point2D for the
 /// solver to use. The function signature doesn't capture this, but the Value passed in
 /// must be the Value::Array(_) variant, or the function will panic (TODO: change to erroring)
-fn array_to_points(array: &Value) -> Vec<solver::Point2D> {
-    let raw_table = match array {
-        Value::Array(a) => a,
-        other => {
-            eprintln!("Internal Error: attempted to parse points from a non-array variant");
-            eprintln!(
-                "Expected toml::Value::Array, but saw \'{:?}\' instead",
-                other
-            );
-            eprintln!("Was attempting to create an array of unprocessed points.");
-            panic!("Internal Error, see above.")
-        }
-    };
-
+pub(crate) fn array_to_points(array: &Value) -> Result<Vec<solver::Point2D>, PointsParsingError> {
+    let raw_table = value_to_array(array);
     let mut points: Vec<solver::Point2D> = Vec::new();
+
+    // TODO: also need to validate that points have unique names & locations!!
+    let mut seen_origin = false;
+    let mut seen_ids: BTreeSet<SolverID> = BTreeSet::new();
+
     for entry in raw_table {
-        let mut tokens = match entry {
-            Value::Array(a) => {
-                if !(a.len() == 2 || a.len() == 4) {
-                    eprintln!("Incorrectly-declared point!");
-                    eprintln!("Points must have [name, Origin] or [name, type, val1, val2]");
-                    eprintln!("Saw a point \'{:?}\' with a length of {}, expected 2 or 4", a, a.len());
-                    panic!("Error processing points, see above.");
-                }
-                a.iter()
+        let mut tokens = {
+            let a = value_to_array(entry);
+            if !(a.len() == 2 || a.len() == 4) {
+                /*TODO: will we ever be in a situation to recover from errors like this?
+                bc making a useful error type is only helpful if we can recover from them
+                later i.e. in the calling function. I don't think we can, so it should panic
+                here, where we can provide the most context as possible before exiting. */
+                return Err(PointsParsingError::Malformed(
+                    MalformedPointType::IncorrectLength,
+                ));
             }
-            other => {
-                eprintln!("Internal Error: attempted to parse points from a non-array variant");
-                eprintln!(
-                    "Expected toml::Value::Array, but saw \'{:?}\' instead",
-                    other
-                );
-                eprintln!("Was attempting to break an unprocessed point into array");
-                panic!("Internal Error, see above.")
-            }
+            a.iter()
         };
-        let id: solver::SolverID = match tokens.next().unwrap().try_into() {
+        let id: SolverID = match tokens.next().unwrap().try_into() {
             Ok(id) => id,
             Err(_) => todo!(),
         };
-        let point = match _string(tokens.next().unwrap()) {
-            "Origin" => solver::Point2D::origin(id),
-            "Cartesian" => {
-                let (x, y) = (
-                    _double(tokens.next().unwrap()),
-                    _double(tokens.next().unwrap()),
-                );
+        let point = match value_to_string(tokens.next().unwrap()) {
+            "Origin" if !seen_ids.contains(&id) => {
+                if seen_origin {
+                    panic!("")
+                }
+                solver::Point2D::origin(id)
+            }
+            "Cartesian" if !seen_ids.contains(&id) => {
+                let (x, y) = to_f64_pair(tokens, "");
                 solver::Point2D::cartesian(id, x, y)
             }
-            "Polar" => {
-                let (r, theta) = (
-                    _double(tokens.next().unwrap()),
-                    _double(tokens.next().unwrap()),
-                );
+            "Polar" if !seen_ids.contains(&id) => {
+                let (r, theta) = to_f64_pair(tokens, "");
                 solver::Point2D::polar(id, r, theta)
             }
             other => {
@@ -134,16 +196,19 @@ fn array_to_points(array: &Value) -> Vec<solver::Point2D> {
         };
         points.push(point);
     }
-    points
+    Ok(points)
 }
 #[allow(unused)]
 pub(crate) fn parse_problem(file: String) {
     let data = file.parse::<Table>().unwrap();
-    
+
     // TODO: validate the problem & parse the problem info from it
-    
-    let points = array_to_points(match data.get("points") {
-        Some(val) => val,
-        None => todo!(),
-    });
+
+    let points = {
+        let points_table = match data.get("points") {
+            Some(table) => table,
+            None => todo!(),
+        };
+        array_to_points(points_table).unwrap() // TODO: error handle
+    };
 }
