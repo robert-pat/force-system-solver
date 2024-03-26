@@ -1,0 +1,30 @@
+# This document represents a 2D truss in static equilibrium
+# this is test case 1
+
+version = 0
+name = "test case 1"
+description = ""
+weight = { applied = false, type = "density", magnitude = 1 }
+
+# defining a point: "name", "definition strategy", <x or r>, <y or theta>
+points = [
+    ["A", "Origin"],
+    ["B", "Cartesian", 2, 0],
+    ["C", "Polar", 2, 60],
+]
+
+members = [
+    ["A", "B"],
+    ["A", "C"],
+    ["B", "C"],
+]
+
+loads = [
+    ["C", 50, "Down"],
+    ["A", 25, "Polar", 90],
+    ["B", 25, "Up"],
+]
+
+# supports must be one of:
+#
+supports = []
