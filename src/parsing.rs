@@ -55,50 +55,35 @@ fn value_to_string(value: &Value) -> &str {
     panic!("Invalid type, see above error");
 }
 
+// TODO: beef up this macro a bit, maybe include what type we expect each thing to be
+//  i.e. include a type parameter and then expand the expression from there
+/// Convert a Option<toml::Value::Float> (like one returned from an iter over Vec<Value>) to
+/// a f64 for use. RN only used in pulling numbers from points, so it also allows you to pass in
+/// the name of the point for good error messages :) 
+/// 
+/// This is also experimental
 macro_rules! toml_to_float {
-    ($x: expr) => {
-        match x.next()
+    ($x: expr, $name: expr) => { 
+        match $x {
         Some(Value::Float(f)) => *f,
         Some(val) => {
-            eprintln!("Invalid coordinates for point \'{point_name}\'!");
+            eprintln!("Invalid coordinates for point \'{}\'!", $name);
             eprintln!("Expected a toml::Value::Float, but saw {:?} instead.", val);
             panic!("Error! see above.");
         }
         None => {
-            eprintln!("Missing Coordinates for Point \'{point_name}\'!");
+            eprintln!("Missing Coordinates for Point \'{}\'!", $name);
             eprintln!("Expected two decimals for the point's position, saw nothing.");
             panic!("Error! see above.");
+        }
         }
     }
 }
 fn to_f64_pair(mut value: Iter<Value>, point_name: &str) -> (f64, f64) {
     // TODO: This macro is only inside this function bc I'm not 100% confident with it yet
-    let a = match value.next() {
-        Some(Value::Float(f)) => *f,
-        Some(val) => {
-            eprintln!("Invalid coordinates for point \'{point_name}\'!");
-            eprintln!("Expected a toml::Value::Float, but saw {:?} instead.", val);
-            panic!("Error! see above.");
-        }
-        None => {
-            eprintln!("Missing Coordinates for Point \'{point_name}\'!");
-            eprintln!("Expected two decimals for the point's position, saw nothing.");
-            panic!("Error! see above.");
-        }
-    };
-    let b = match value.next() {
-        Some(Value::Float(f)) => *f,
-        Some(val) => {
-            eprintln!("Invalid coordinates for point \'{point_name}\'!");
-            eprintln!("Expected a toml::Value::Float, but saw {:?} instead.", val);
-            panic!("Error! see above.");
-        }
-        None => {
-            eprintln!("Missing Coordinates for Point \'{point_name}\'!");
-            eprintln!("Expected two decimals for the point's position, saw nothing.");
-            panic!("Error! see above.");
-        }
-    };
+    let a = toml_to_float!(value.next(), point_name);
+    let b = toml_to_float!(value.next(), point_name);
+    
     if value.len() != 0 {
         eprintln!("Warning, Point declarations should end with 2 coordinates only!");
         eprintln!(
