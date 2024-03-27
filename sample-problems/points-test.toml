@@ -1,0 +1,8 @@
+points = [
+    ["A", "Origin"],
+    ["B", "Cartesian", 2, 0],
+    ["C", "Polar", 2, 60],
+    ["D", "Cartesian", 1, 1],
+    ["E", ],
+    [],
+]

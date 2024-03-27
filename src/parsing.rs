@@ -37,11 +37,11 @@ TODO: finished writing this:
   > The generated output file has all the resolved information (e.g. point positions & vector components)
   > The names / order is the same as the input file
 */
-use crate::solver;
-use crate::solver::SolverID;
-use std::collections::BTreeSet;
 use std::slice::Iter;
+
 use toml::{Table, Value};
+
+use crate::solver;
 
 fn value_to_string(value: &Value) -> &str {
     if let Value::String(s) = value {
@@ -57,13 +57,13 @@ fn value_to_string(value: &Value) -> &str {
 
 // TODO: beef up this macro a bit, maybe include what type we expect each thing to be
 //  i.e. include a type parameter and then expand the expression from there
-/// Convert a Option<toml::Value::Float> (like one returned from an iter over Vec<Value>) to
+/// Convert an Option<toml::Value::Float> (like one returned from an iter over Vec<Value>) to
 /// a f64 for use. RN only used in pulling numbers from points, so it also allows you to pass in
-/// the name of the point for good error messages :) 
-/// 
+/// the name of the point for good error messages :)
+///
 /// This is also experimental
 macro_rules! toml_to_float {
-    ($x: expr, $name: expr) => { 
+    ($x: expr, $name: expr) => {
         match $x {
         Some(Value::Float(f)) => *f,
         Some(val) => {
@@ -79,11 +79,15 @@ macro_rules! toml_to_float {
         }
     }
 }
+#[allow(unused)]
+macro_rules! unwrap_toml {
+    ($value: expr, ) => {};
+}
 fn to_f64_pair(mut value: Iter<Value>, point_name: &str) -> (f64, f64) {
     // TODO: This macro is only inside this function bc I'm not 100% confident with it yet
     let a = toml_to_float!(value.next(), point_name);
     let b = toml_to_float!(value.next(), point_name);
-    
+
     if value.len() != 0 {
         eprintln!("Warning, Point declarations should end with 2 coordinates only!");
         eprintln!(
@@ -110,63 +114,43 @@ fn value_to_array(value: &Value) -> &Vec<Value> {
     panic!("Invalid Type, see above!");
 }
 
+// TODO: better error messages by 1) impl Error 2) including name info to find these
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum DuplicatePointType {
-    Origin,
-    Name,
-    Location,
-}
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum MalformedPointType {
-    InvalidName,
-    IncorrectLength,
-}
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum PointsParsingError {
-    Duplicate(DuplicatePointType),
-    Malformed(MalformedPointType),
+pub enum PointValidationError {
+    MultipleOrigins,
+    Overlapping,
+    IdenticalNames,
 }
 /// Takes in a toml::Value::Array and parses it into an array of Point2D for the
 /// solver to use. The function signature doesn't capture this, but the Value passed in
 /// must be the Value::Array(_) variant, or the function will panic (TODO: change to erroring)
-pub(crate) fn array_to_points(array: &Value) -> Result<Vec<solver::Point2D>, PointsParsingError> {
+pub(crate) fn parse_points_from_array(array: &Value) -> Vec<solver::Point2D> {
     let raw_table = value_to_array(array);
     let mut points: Vec<solver::Point2D> = Vec::new();
-
-    // TODO: also need to validate that points have unique names & locations!!
-    let mut seen_origin = false;
-    let mut seen_ids: BTreeSet<SolverID> = BTreeSet::new();
 
     for entry in raw_table {
         let mut tokens = {
             let a = value_to_array(entry);
             if !(a.len() == 2 || a.len() == 4) {
-                /*TODO: will we ever be in a situation to recover from errors like this?
-                bc making a useful error type is only helpful if we can recover from them
-                later i.e. in the calling function. I don't think we can, so it should panic
-                here, where we can provide the most context as possible before exiting. */
-                return Err(PointsParsingError::Malformed(
-                    MalformedPointType::IncorrectLength,
-                ));
+               todo!()
             }
             a.iter()
         };
-        let id: SolverID = match tokens.next().unwrap().try_into() {
-            Ok(id) => id,
-            Err(_) => todo!(),
+        let (id, _name) = {
+            let t = tokens.next().unwrap();
+            if let Value::String(s) = t {
+                (t.try_into().unwrap(), s.as_str())
+            } else {
+                todo!()
+            }
         };
         let point = match value_to_string(tokens.next().unwrap()) {
-            "Origin" if !seen_ids.contains(&id) => {
-                if seen_origin {
-                    panic!("")
-                }
-                solver::Point2D::origin(id)
-            }
-            "Cartesian" if !seen_ids.contains(&id) => {
+            "Origin" => solver::Point2D::origin(id),
+            "Cartesian" => {
                 let (x, y) = to_f64_pair(tokens, "");
                 solver::Point2D::cartesian(id, x, y)
             }
-            "Polar" if !seen_ids.contains(&id) => {
+            "Polar" => {
                 let (r, theta) = to_f64_pair(tokens, "");
                 solver::Point2D::polar(id, r, theta)
             }
@@ -181,7 +165,7 @@ pub(crate) fn array_to_points(array: &Value) -> Result<Vec<solver::Point2D>, Poi
         };
         points.push(point);
     }
-    Ok(points)
+    points
 }
 #[allow(unused)]
 pub(crate) fn parse_problem(file: String) {
@@ -194,6 +178,6 @@ pub(crate) fn parse_problem(file: String) {
             Some(table) => table,
             None => todo!(),
         };
-        array_to_points(points_table).unwrap() // TODO: error handle
+        parse_points_from_array(points_table) // TODO: error handle
     };
 }

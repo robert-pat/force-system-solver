@@ -1,3 +1,6 @@
+use crate::parsing;
+use toml::Table;
+
 #[test]
 #[allow(non_snake_case)]
 fn check_nalgebra() -> Result<(), ()> {
@@ -23,6 +26,13 @@ fn check_nalgebra() -> Result<(), ()> {
 }
 
 #[test]
-fn build_equations_test_one() -> Result<(), ()> {
-    Ok(())
+fn read_points_from_file() -> Result<(), ()> {
+    let file = std::fs::read_to_string(r"sample-problems\points-test.toml").unwrap();
+    let data = file.parse::<Table>().unwrap();
+    let points = {
+        let a = data.get("points").unwrap();
+        parsing::parse_points_from_array(a)
+    };
+
+    todo!("Finish validating tests");
 }

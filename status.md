@@ -1,3 +1,7 @@
+Next:
+- write macro to unwrap toml::Value values ?
+- use Result error handling for validating points after they're parsed
+
 To-do List (In no particular order):
 1) Finalize how points are described
 2) Design error system for the parser
