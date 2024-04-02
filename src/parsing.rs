@@ -55,63 +55,39 @@ fn value_to_string(value: &Value) -> &str {
     panic!("Invalid type, see above error");
 }
 
-// TODO: beef up this macro a bit, maybe include what type we expect each thing to be
-//  i.e. include a type parameter and then expand the expression from there
-/// Convert an Option<toml::Value::Float> (like one returned from an iter over Vec<Value>) to
-/// a f64 for use. RN only used in pulling numbers from points, so it also allows you to pass in
-/// the name of the point for good error messages :)
-///
-/// This is also experimental
-macro_rules! toml_to_float {
-    ($x: expr, $name: expr) => {
-        match $x {
-        Some(Value::Float(f)) => *f,
-        Some(val) => {
-            eprintln!("Invalid coordinates for point \'{}\'!", $name);
-            eprintln!("Expected a toml::Value::Float, but saw {:?} instead.", val);
-            panic!("Error! see above.");
+fn parse_coordinate_pair(mut value: Iter<Value>, identifier: &str) -> (f64, f64) {
+    let (a, b) = (value.next(), value.next());
+    if let (Some(Value::Float(a)), Some(Value::Float(b))) = (a, b) {
+        if value.next().is_some() {
+            eprintln!("Warning! extra items in point definition!");
+            eprintln!(
+                "Point {identifier}: {} has {} extra arguments (they were ignored).",
+                solver::SolverID::new(identifier),
+                value.len() + 1
+            );
         }
-        None => {
-            eprintln!("Missing Coordinates for Point \'{}\'!", $name);
-            eprintln!("Expected two decimals for the point's position, saw nothing.");
-            panic!("Error! see above.");
-        }
-        }
-    }
-}
-#[allow(unused)]
-macro_rules! unwrap_toml {
-    ($value: expr, ) => {};
-}
-fn to_f64_pair(mut value: Iter<Value>, point_name: &str) -> (f64, f64) {
-    // TODO: This macro is only inside this function bc I'm not 100% confident with it yet
-    let a = toml_to_float!(value.next(), point_name);
-    let b = toml_to_float!(value.next(), point_name);
 
-    if value.len() != 0 {
-        eprintln!("Warning, Point declarations should end with 2 coordinates only!");
-        eprintln!(
-            "Saw a coordinate pair with {} extra items, should be 0!",
-            value.len()
-        );
-        eprintln!(
-            "Expected: \"{a}\", \"{b}\" but Saw: \"{a}\", \"{b}\", \"{}\"... <- Extra!",
-            value.next().unwrap()
-        );
+        return (*a, *b);
+    } else if let (Some(Value::Integer(a)), Some(Value::Integer(b))) = (a, b) {
+        if value.next().is_some() {
+            eprintln!("Warning! extra items in point definition!");
+            eprintln!(
+                "Point {identifier}: {} has {} extra arguments (they were ignored).",
+                solver::SolverID::new(identifier),
+                value.len() + 1
+            );
+        }
+
+        return (*a as f64, *b as f64);
     }
-    (a, b)
-}
-fn value_to_array(value: &Value) -> &Vec<Value> {
-    if let Value::Array(a) = value {
-        return a;
-    }
-    eprintln!("Can not convert non-array type into array!");
+    eprintln!("Error: expected two numbers in the format \'a, b\' in the declaration of a point");
     eprintln!(
-        "Expected to find a toml::Value::Array, but saw \'{:?}\' instead.",
-        value
+        "Saw \'{:?}, {:?}\' in the description of point {identifier}: {}.",
+        a,
+        b,
+        solver::SolverID::new(identifier)
     );
-    eprintln!("Unable to unwrap into an array.");
-    panic!("Invalid Type, see above!");
+    panic!("Couldn't parse point coordinates!");
 }
 
 // TODO: better error messages by 1) impl Error 2) including name info to find these
@@ -121,22 +97,34 @@ pub enum PointValidationError {
     Overlapping,
     IdenticalNames,
 }
+#[allow(unused)]
+fn validate_points() {
+    todo!()
+}
 /// Takes in a toml::Value::Array and parses it into an array of Point2D for the
 /// solver to use. The function signature doesn't capture this, but the Value passed in
 /// must be the Value::Array(_) variant, or the function will panic (TODO: change to erroring)
 pub(crate) fn parse_points_from_array(array: &Value) -> Vec<solver::Point2D> {
-    let raw_table = value_to_array(array);
+    let raw_table = if let Value::Array(a) = array {
+        a
+    } else {
+        eprintln!("Saw a \'{:?}\', but was expecting a toml::Value::Array", array);
+        panic!("Attempted to parse points from a non-point array thing!");
+    };
     let mut points: Vec<solver::Point2D> = Vec::new();
 
     for entry in raw_table {
+        // maybe a tokenize! macro would be useful
         let mut tokens = {
-            let a = value_to_array(entry);
-            if !(a.len() == 2 || a.len() == 4) {
-               todo!()
-            }
+            let a = if let Value::Array(a) = entry {
+                a
+            } else {
+                todo!(); // maybe a macro to wrap all of this up: the pattern matching as an assert!
+            };
+            assert!(a.len() >= 2, "Point \'{:?}\' has the wrong length, expected 2 or 4", a);
             a.iter()
         };
-        let (id, _name) = {
+        let (id, point_name) = {
             let t = tokens.next().unwrap();
             if let Value::String(s) = t {
                 (t.try_into().unwrap(), s.as_str())
@@ -147,20 +135,19 @@ pub(crate) fn parse_points_from_array(array: &Value) -> Vec<solver::Point2D> {
         let point = match value_to_string(tokens.next().unwrap()) {
             "Origin" => solver::Point2D::origin(id),
             "Cartesian" => {
-                let (x, y) = to_f64_pair(tokens, "");
+                let (x, y) = parse_coordinate_pair(tokens, point_name);
                 solver::Point2D::cartesian(id, x, y)
             }
             "Polar" => {
-                let (r, theta) = to_f64_pair(tokens, "");
+                let (r, theta) = parse_coordinate_pair(tokens, point_name);
                 solver::Point2D::polar(id, r, theta)
             }
             other => {
                 eprintln!("Invalid Point Definition Type!");
-                eprintln!(
+                panic!(
                     "Points must be one of [Origin, Cartesian, Polar], but saw \'{}\'",
                     other
                 );
-                panic!("Unable to parse file! See previous errors")
             }
         };
         points.push(point);

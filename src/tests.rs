@@ -1,4 +1,6 @@
+#[cfg(test)]
 use crate::parsing;
+#[cfg(test)]
 use toml::Table;
 
 #[test]

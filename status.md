@@ -1,6 +1,8 @@
 Next:
 - write macro to unwrap toml::Value values ?
 - use Result error handling for validating points after they're parsed
+- Should the parsing code remember the original point names for errors?
+  - How would the errors be propagated so that that's useful?
 
 To-do List (In no particular order):
 1) Finalize how points are described
