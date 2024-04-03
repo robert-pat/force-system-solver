@@ -4,7 +4,7 @@
 version = 0
 name = "test case 1"
 description = ""
-weight = { applied = false, type = "density", magnitude = 1 }
+weight = { applied = false, type = "density", magnitude = 1 } # unused, maybe remove
 
 # defining a point: "name", "definition strategy", <x or r>, <y or theta>
 points = [
@@ -25,4 +25,5 @@ loads = [
     ["B", 25, "Up"],
 ]
 
+# currently
 supports = []

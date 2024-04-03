@@ -5,17 +5,24 @@ or passed in via the command line) and then attempt to solve the force system as
 expected to undergo many revisions.
 
 ## Basic Outline / Theory of Operation
-This project is in alpha & I will be changing these requirements a LOT. Right now here is what I'm thinking:
-- See ```parsing.rs``` for the current general plan
-- TODO: write up the assumptions & invariants here
+This project is in alpha & I will be changing these requirements a LOT. Right now here's the general sketch:
+- Start with a toml file that has everything defined:
+  - Points, members, loads, supports
+  - background info
+- Turn each section into some usable (but separate) info:
+  - Points become a list of Point2D w/ their location & name
+  - Members become a list of Force2D w/ their directions & points
+  - Loads become a list of Force2D w/ their directions, magnitudes, & points
+  - Supports: are TODO
+- Combine all of the forces into TrussJoint2D s:
+  - Go through each force and 'attach' it to the joint
+- Solve the joints with the methods in ```solver.rs```
 
-### Research on other programs / structure:
-- Def need to use Matrices--could use my WIP library, but I'd rather just use an existing proven one
-- 
+
 ### Solver Expectations & Solving Strategy:
 The solver in this project mainly works by using the Method of Joints to create a series of linear equations from the
-free-body diagrams of each joint in the truss. These equations are then combined into a matrix which is solved using matrix
-algebra (matrix multiplication). The solver also performs some optimizations before the full matrix is constructed.
+free-body diagrams of each joint in the truss. These equations are then combined into a matrix which is solved using 
+matrix algebra (matrix multiplication). 
 
 ## Building / Running this project
 When there is a working build, I will add it to the releases on the GitHub sidebar. If you are on an x86-64 Windows device, you can download and run the executable. Until then (or if you are on a different platform) you will need to build from source:

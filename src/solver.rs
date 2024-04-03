@@ -33,6 +33,9 @@ impl SolverID {
         h.write(data);
         SolverID(h.finish())
     }
+    pub(crate) fn concatenate(self, other: SolverID) -> Self {
+        SolverID(self.0.wrapping_add(other.0))
+    }
 }
 impl std::fmt::Display for SolverID {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -71,6 +74,17 @@ impl Point2D {
     }
     pub(crate) fn cartesian(id: SolverID, x: f64, y: f64) -> Self {
         Self { id, x, y }
+    }
+    pub(crate) fn has_id(&self, id: &SolverID) -> bool {
+        &self.id == id
+    }
+    pub(crate) fn direction_to(&self, other: &Point2D) -> Direction2D {
+        let (dx, dy) = (other.x - self.x, other.y - self.y);
+        let mag = (dx.powf(2.0) + dy.powf(2.0)).sqrt();
+        Direction2D {
+            x: dx / mag,
+            y: dy / mag,
+        }
     }
 }
 impl PartialEq for Point2D {
@@ -144,6 +158,9 @@ impl Force2D {
             direction: dir,
         }
     }
+    pub fn point(&self) -> &Point2D {
+        &self.point
+    }
 }
 
 /// Takes in a set of forces and a template for what order the row vector should be constructed in.
@@ -203,7 +220,7 @@ pub(crate) fn get_rows_from_joint(
     Ok((x_coefficients, y_coefficients))
 }
 
-struct TrussJoint2D {
+pub(crate) struct TrussJoint2D {
     point: Point2D,
     forces: Vec<Force2D>,
 }
@@ -213,6 +230,9 @@ impl TrussJoint2D {
             return None;
         }
         Some(Self { point: p, forces })
+    }
+    pub fn add(&mut self, force: Force2D) {
+        self.forces.push(force)
     }
 }
 
