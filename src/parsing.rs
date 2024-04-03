@@ -37,7 +37,7 @@ TODO: finished writing this:
   > The generated output file has all the resolved information (e.g. point positions & vector components)
   > The names / order is the same as the input file
 */
-use std::slice::Iter;
+use std::{collections::BTreeMap, slice::Iter};
 
 use toml::{Table, Value};
 
@@ -98,9 +98,10 @@ pub enum PointValidationError {
     IdenticalNames,
 }
 #[allow(unused)]
-fn validate_points() {
+fn validate_points(points: &[solver::Point2D]) -> Result<(), PointValidationError> {
     todo!()
 }
+
 /// Takes in a toml::Value::Array and parses it into an array of Point2D for the
 /// solver to use. The function signature doesn't capture this, but the Value passed in
 /// must be the Value::Array(_) variant, or the function will panic (TODO: change to erroring)
@@ -108,7 +109,10 @@ pub(crate) fn parse_points_from_array(array: &Value) -> Vec<solver::Point2D> {
     let raw_table = if let Value::Array(a) = array {
         a
     } else {
-        eprintln!("Saw a \'{:?}\', but was expecting a toml::Value::Array", array);
+        eprintln!(
+            "Saw a \'{:?}\', but was expecting a toml::Value::Array",
+            array
+        );
         panic!("Attempted to parse points from a non-point array thing!");
     };
     let mut points: Vec<solver::Point2D> = Vec::new();
@@ -121,16 +125,13 @@ pub(crate) fn parse_points_from_array(array: &Value) -> Vec<solver::Point2D> {
             } else {
                 todo!(); // maybe a macro to wrap all of this up: the pattern matching as an assert!
             };
-            assert!(a.len() >= 2, "Point \'{:?}\' has the wrong length, expected 2 or 4", a);
+            assert!(a.len() >= 2, "Point \'{:?}\' has the wrong length, expected 2 or 4, got {}", a, a.len());
             a.iter()
         };
-        let (id, point_name) = {
-            let t = tokens.next().unwrap();
-            if let Value::String(s) = t {
-                (t.try_into().unwrap(), s.as_str())
-            } else {
-                todo!()
-            }
+        let (id, point_name) = if let Some(Value::String(s)) = tokens.next() {
+            (solver::SolverID::new(s), s.as_str())
+        } else {
+            todo!()
         };
         let point = match value_to_string(tokens.next().unwrap()) {
             "Origin" => solver::Point2D::origin(id),
@@ -145,8 +146,9 @@ pub(crate) fn parse_points_from_array(array: &Value) -> Vec<solver::Point2D> {
             other => {
                 eprintln!("Invalid Point Definition Type!");
                 panic!(
-                    "Points must be one of [Origin, Cartesian, Polar], but saw \'{}\'",
-                    other
+                    "Points must be one of [Origin, Cartesian, Polar], but saw \'{}\' at \'{}\'",
+                    other,
+                    point_name,
                 );
             }
         };
@@ -154,17 +156,45 @@ pub(crate) fn parse_points_from_array(array: &Value) -> Vec<solver::Point2D> {
     }
     points
 }
+macro_rules! array_me {
+    ($value: expr) => {
+        if let toml::Value::Array(a) = $value {
+            a
+        } else {
+            todo!()
+        }
+    };
+}
+pub(crate) fn parse_loads_from_array(array: &Value) -> Vec<solver::Force2D> {
+    let raw_forces = array_me!(array);
+    let mut forces: Vec<solver::Force2D> = Vec::new();
+    
+    for raw_force in raw_forces {
+        let mut tokens = array_me!(raw_force).iter();
+        let (id, name) = if let Some(Value::String(s)) = tokens.next() {
+            (solver::SolverID::new(s), s.as_str())
+        } else {todo!()};
+        
+        let magnitude = if let Some(val) = tokens.next() {
+            match val {
+                Value::Float(f) => *f,
+                Value::Integer(i) => *i as f64,
+                _ => todo!()
+            }
+        } else {
+            todo!()
+        };
+        
+        let force = match (tokens.next(), tokens.next()) {
+            _ => todo!()
+        };
+    }
+    todo!()
+}
 #[allow(unused)]
 pub(crate) fn parse_problem(file: String) {
     let data = file.parse::<Table>().unwrap();
-
-    // TODO: validate the problem & parse the problem info from it
-
-    let points = {
-        let points_table = match data.get("points") {
-            Some(table) => table,
-            None => todo!(),
-        };
-        parse_points_from_array(points_table) // TODO: error handle
-    };
+    let points = parse_points_from_array(data.get("points").unwrap());
+    
+    
 }

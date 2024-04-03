@@ -35,6 +35,5 @@ fn read_points_from_file() -> Result<(), ()> {
         let a = data.get("points").unwrap();
         parsing::parse_points_from_array(a)
     };
-
-    todo!("Finish validating tests");
+    panic!("{:?}", points);
 }
