@@ -33,8 +33,26 @@ impl SolverID {
         h.write(data);
         SolverID(h.finish())
     }
+
+    /// Concatenates the two IDs together, producing a new ID.
+    /// The new ID will be the same for the same given inout IDs
+    /// TODO: Hash collision potential??
     pub(crate) fn concatenate(self, other: SolverID) -> Self {
-        SolverID(self.0.wrapping_add(other.0))
+        match self.0.cmp(&other.0) {
+            Ordering::Equal => self,
+            Ordering::Greater => {
+                let mut hasher = DefaultHasher::new();
+                hasher.write_u64(self.0);
+                hasher.write_u64(other.0);
+                SolverID(hasher.finish())
+            }
+            Ordering::Less => {
+                let mut hasher = DefaultHasher::new();
+                hasher.write_u64(other.0);
+                hasher.write_u64(self.0);
+                SolverID(hasher.finish())
+            }
+        }
     }
 }
 impl std::fmt::Display for SolverID {
