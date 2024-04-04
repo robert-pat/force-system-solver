@@ -65,6 +65,7 @@ macro_rules! array_me {
         }
     };
 }
+
 // TODO: better error messages by 1) impl Error 2) including name info to find these
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum PointValidationError {}
@@ -84,42 +85,29 @@ pub(crate) fn parse_points_from_array(
 
     for entry in raw_table {
         // maybe a tokenize! macro would be useful
-        let mut tokens = {
-            let a = if let Value::Array(a) = entry {
-                a
-            } else {
-                todo!(); // maybe a macro to wrap all of this up: the pattern matching as an assert!
-            };
-            assert!(
-                a.len() >= 2,
-                "Point \'{:?}\' has the wrong length, expected 2 or 4, got {}",
-                a,
-                a.len()
-            );
-            a.iter()
+        let mut tokens = match entry {
+            Value::Array(a) if a.len() >= 2 => {a.iter()},
+            Value::Array(a) => panic!("Point \'{:?}\' declared with too few values!", a[0]),
+            other => panic!("Error: expecting array of values to parse points from! Saw {:?}", other),
         };
-        let (id, point_name) = if let Some(Value::String(s)) = tokens.next() {
-            (solver::SolverID::new(s), s.as_str())
-        } else {
-            todo!("Function convert_to_id or something like that")
+        
+        let (id, point_name) = match tokens.next() {
+            Some(Value::String(s)) => (solver::SolverID::new(s.as_str()), s.as_str()),
+            other => panic!("Expected a point name (text), but got \'{:?}\'", other)
         };
-        let point = match value_to_string(tokens.next().unwrap()) {
-            "Origin" => solver::Point2D::origin(id),
-            "Cartesian" => {
+            
+        let point = match tokens.next() {
+            Some(Value::String(s)) if s.as_str() == "Origin" => solver::Point2D::origin(id),
+            Some(Value::String(s)) if s.as_str() == "Cartesian" => {
                 let (x, y) = parse_coordinate_pair(tokens, point_name);
                 solver::Point2D::cartesian(id, x, y)
             }
-            "Polar" => {
+            Some(Value::String(s)) if s.as_str() == "Polar" => {
                 let (r, theta) = parse_coordinate_pair(tokens, point_name);
                 solver::Point2D::polar(id, r, theta)
             }
-            other => {
-                eprintln!("Invalid Point Definition Type!");
-                panic!(
-                    "Points must be one of [Origin, Cartesian, Polar], but saw \'{}\' at \'{}\'",
-                    other, point_name,
-                );
-            }
+            Some(other) => panic!("Invalid Point Definition! Expected one of [Origin, Cartesian, Polar] but saw \'{:?}\' at \'{point_name}\'", other),
+            None => panic!("Point missing definition type: point \'{point_name}\' has no location"),
         };
         points.insert(id, point);
     }
@@ -134,10 +122,10 @@ pub(crate) fn parse_loads_from_array(
 
     for raw_force in raw_forces {
         let mut tokens = array_me!(raw_force).iter();
-        let (point_id, name) = if let Some(Value::String(s)) = tokens.next() {
-            (solver::SolverID::new(s), s.as_str())
-        } else {
-            todo!()
+        
+        let (point_id, name) = match tokens.next() {
+            Some(Value::String(s)) => (solver::SolverID::new(s.as_str()), s.as_str()),
+            other => panic!("Expected the name of a point (text), but got \'{:?}\'", other)
         };
 
         let magnitude = match tokens.next() {
@@ -173,7 +161,10 @@ pub(crate) fn parse_loads_from_array(
         // TODO: what to do about parsing these names for loads
         let force = solver::Force2D::new(
             solver::SolverID::new("some load applied"),
-            points.get(&point_id).unwrap().clone(),
+            match points.get(&point_id){
+                Some(p) => p.clone(),
+                None => panic!("Loads must be attached to a valid point, \'{name}\' does not exist!"),
+            },
             direction,
             solver::VectorComponent::KnownExactly(magnitude),
         );
@@ -189,12 +180,12 @@ pub(crate) fn construct_member_pairs(array: &Value) -> Vec<(solver::SolverID, so
     for raw_member in raw_members {
         let mut tokens = array_me!(raw_member).iter();
 
-        // To ensure that the member AB is the same as member BA, we sort the names by lexicographic value
-        // so that they will always be the same.
+        // To ensure that the member AB should have the same order at member BA, so we sort
         let pair = match (tokens.next(), tokens.next()) {
             (Some(Value::String(s1)), Some(Value::String(s2))) => match s1.cmp(s2) {
                 Ordering::Greater => (solver::SolverID::new(s1.as_str()), solver::SolverID::new(s2.as_str())),
                 Ordering::Less => (solver::SolverID::new(s2.as_str()), solver::SolverID::new(s1.as_str())),
+                // this assumes the Ordering::Equal strings are actually the same string
                 Ordering::Equal => {eprintln!("Non-existent member declared! {:?}, {:?}", s1, s2); continue},
             },
             (a, b) => panic!("Incorrect structural member definition! Expected \'point1 name, point2 name\', got \'{:?}, {:?}\'", a, b)
@@ -242,5 +233,38 @@ pub(crate) fn parse_problem(file: String) -> Vec<solver::TrussJoint2D> {
     }
 
     let support_reactions = generate_support_reactions(data.get("supports").unwrap());
-    todo!()
+
+    let mut joints = {
+        let mut map: BTreeMap<solver::SolverID, solver::TrussJoint2D> = BTreeMap::new();
+        for (id, _) in points.iter() {
+            map.insert(*id, solver::TrussJoint2D::empty(*id));
+        }
+        map
+    };
+
+    for force in loads {
+        let joint = match joints.get_mut(&force.point_id()) {
+            Some(j) => j,
+            None => todo!()
+        };
+
+        joint.add(force);
+    }
+    for force in internal_forces {
+        let joint = match joints.get_mut(&force.point_id()) {
+            Some(j) => j,
+            None => todo!()
+        };
+
+        joint.add(force);
+    }
+    for force in support_reactions {
+        let joint = match joints.get_mut(&force.point_id()) {
+            Some(j) => j,
+            None => todo!()
+        };
+
+        joint.add(force);
+    }
+    joints.into_iter().map(|(id, joint)| joint).collect()
 }

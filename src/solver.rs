@@ -180,8 +180,11 @@ impl Force2D {
             direction: dir,
         }
     }
-    pub fn point(&self) -> &Point2D {
-        &self.point
+    pub fn point_id(&self) -> SolverID {
+        self.point.id
+    }
+    pub fn id(&self) -> SolverID {
+        self.id
     }
 }
 
@@ -243,7 +246,7 @@ pub(crate) fn get_rows_from_joint(
 }
 
 pub(crate) struct TrussJoint2D {
-    point: Point2D,
+    point_id: SolverID,
     forces: Vec<Force2D>,
 }
 impl TrussJoint2D {
@@ -251,10 +254,16 @@ impl TrussJoint2D {
         if forces.iter().any(|f| f.point != p) {
             return None;
         }
-        Some(Self { point: p, forces })
+        Some(Self { point_id: p.id, forces })
     }
     pub fn add(&mut self, force: Force2D) {
         self.forces.push(force)
+    }
+    pub fn empty(point_id: SolverID) -> Self {
+        Self {
+            point_id,
+            forces: Vec::new(),
+        }
     }
 }
 
