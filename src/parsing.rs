@@ -19,7 +19,7 @@ fn value_to_string(value: &Value) -> &str {
 
 /// Turn a iterator over toml Values into a pair of numbers. This will warn if there are more than 2
 /// values in the iterator and panic if there are less than 2 (or if one/both isn't a number). This
-/// function works with both toml::Value::Float and toml::Value::Integer 
+/// function works with both toml::Value::Float and toml::Value::Integer
 fn parse_coordinate_pair(mut value: Iter<Value>, identifier: &str) -> (f64, f64) {
     let (a, b) = (value.next(), value.next());
     if let (Some(Value::Float(a)), Some(Value::Float(b))) = (a, b) {
@@ -101,7 +101,7 @@ pub(crate) fn parse_points_from_array(
         let (id, point_name) = if let Some(Value::String(s)) = tokens.next() {
             (solver::SolverID::new(s), s.as_str())
         } else {
-            todo!()
+            todo!("Function convert_to_id or something like that")
         };
         let point = match value_to_string(tokens.next().unwrap()) {
             "Origin" => solver::Point2D::origin(id),
@@ -143,7 +143,7 @@ pub(crate) fn parse_loads_from_array(
         let magnitude = match tokens.next() {
             Some(Value::Float(f)) => *f,
             Some(Value::Integer(i)) => *i as f64,
-            _ => todo!(),
+            other => panic!("Load \'{name}\' has improperly defined magnitude, expended a number but saw \'{:?}\'", other),
         };
 
         let direction = match tokens.next() {
@@ -162,11 +162,12 @@ pub(crate) fn parse_loads_from_array(
                 } else if let Some(Value::Integer(i)) = t {
                     solver::Direction2D::from_angle(*i as f64)
                 } else {
-                    todo!()
+                    panic!("Invalid angle provided for load \'{name}\', expected a number and saw \'{:?}\'", t);
                 }
             }
-            Some(other) => todo!(),
-            None => todo!(),
+            Some(Value::String(s)) => panic!("Load \'{name}\' has in invalid direction: \'{s}\' must be [Up, Down, Left, Right, Polar]"),
+            Some(other) => panic!("Invalid value in the direction for force \'{name}\', saw {:?}", other),
+            None => panic!("Saw an applied load with no direction! Load \'{name}\' must have a direction"),
         };
 
         // TODO: what to do about parsing these names for loads
