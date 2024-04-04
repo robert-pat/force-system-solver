@@ -5,17 +5,6 @@ use toml::{Table, Value};
 
 use crate::solver;
 
-fn value_to_string(value: &Value) -> &str {
-    if let Value::String(s) = value {
-        return s;
-    }
-    eprintln!("Can not convert non-string value to string!");
-    eprintln!(
-        "Expected to find a toml::Value::String, but saw \'{:?}\' instead",
-        value
-    );
-    panic!("Invalid type, see above error");
-}
 
 /// Turn a iterator over toml Values into a pair of numbers. This will warn if there are more than 2
 /// values in the iterator and panic if there are less than 2 (or if one/both isn't a number). This
@@ -69,9 +58,15 @@ macro_rules! array_me {
 // TODO: better error messages by 1) impl Error 2) including name info to find these
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum PointValidationError {}
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum EquilibriumError {}
 
 #[allow(unused)]
 fn validate_points(points: &[solver::Point2D]) -> Result<(), PointValidationError> {
+    todo!()
+}
+#[allow(unused)]
+fn validate_static_equilibrium() -> Result<(), EquilibriumError> {
     todo!()
 }
 /// Takes in a toml::Value::Array and parses it into an array of Point2D for the
@@ -200,11 +195,8 @@ pub(crate) fn construct_member_pairs(array: &Value) -> Vec<(solver::SolverID, so
     members
 }
 pub(crate) fn generate_support_reactions(array: &Value) -> Vec<solver::Force2D> {
-    let raw_supports = array_me!(array);
-    for raw_support in raw_supports {
-        // TODO: decide how the supports will work
-    }
-    Vec::new()
+    let _raw_supports = array_me!(array);
+    todo!()
 }
 #[allow(unused)]
 pub(crate) fn parse_problem(file: String) -> Vec<solver::TrussJoint2D> {
