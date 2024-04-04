@@ -104,6 +104,10 @@ impl Point2D {
             y: dy / mag,
         }
     }
+    pub(crate) fn distance_to(&self, other: &Point2D) -> f64 {
+        let (dx, dy) = (other.x - self.x, other.y - self.y);
+        (dx.powf(2.0) + dy.powf(2.0)).sqrt()
+    }
 }
 impl PartialEq for Point2D {
     fn eq(&self, other: &Self) -> bool {
@@ -275,9 +279,9 @@ fn solve_truss(joints: &Vec<TrussJoint2D>) -> Result<Vec<(SolverID, f64)>, ()> {
     };
 
     // TODO: we can't just use any equations arbitrarily:
-    //  The matrix needs to have at least one (maybe more?) of each unknown in it
-    //  e.g. no unknown can have a zero column vector for its place in the matrix
-    //
+    //  We add equations so that each unknown has at least 1 non-zero spot
+    //  then we just add whatever equations we have
+    //  see .iter().cycle() and just keep track of what's been added so far
     let mut coefficients = Vec::new();
     let mut constants: Vec<f64> = Vec::new();
 
