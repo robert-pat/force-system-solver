@@ -268,14 +268,15 @@ impl TrussJoint2D {
 }
 
 fn find_unknowns(joints: &Vec<TrussJoint2D>) -> Vec<SolverID> {
-    let mut set = BTreeSet::new();
+    let mut unknowns: Vec<SolverID> = Vec::new();
     for joint in joints {
         for force in &joint.forces {
-            set.insert(force.id);
+            unknowns.push(force.id);
         }
     }
-    let mut unknowns = set.into_iter().collect::<Vec<_>>();
+
     unknowns.sort();
+    unknowns.dedup();
     unknowns
 }
 
