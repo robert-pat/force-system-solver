@@ -1,12 +1,28 @@
 use std::cmp::Ordering;
+use std::collections::BTreeSet;
+use std::error::Error;
+use std::fmt::{Display, Formatter};
 use std::{collections::BTreeMap, slice::Iter};
 
 use toml::{Table, Value};
 
 use crate::solver;
 
+pub(crate) struct ProblemInformation {
+    pub(crate) name: String,
+}
+pub(crate) fn get_problem_information(problem: &str) -> ProblemInformation {
+    let table = problem.parse::<Table>().unwrap();
+    let name = match table.get("name") {
+        Some(Value::String(s)) => s.clone(),
+        Some(_other) => String::new(),
+        None => String::new(),
+    };
 
-/// Turn a iterator over toml Values into a pair of numbers. This will warn if there are more than 2
+    ProblemInformation { name }
+}
+
+/// Turn an iterator over toml Values into a pair of numbers. This will warn if there are more than 2
 /// values in the iterator and panic if there are less than 2 (or if one/both isn't a number). This
 /// function works with both toml::Value::Float and toml::Value::Integer
 fn parse_coordinate_pair(mut value: Iter<Value>, identifier: &str) -> (f64, f64) {
@@ -57,18 +73,39 @@ macro_rules! array_me {
 
 // TODO: better error messages by 1) impl Error 2) including name info to find these
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum PointValidationError {}
+pub enum PointValidationError {
+    DuplicatePoint,
+    DuplicatePosition,
+}
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum EquilibriumError {}
 
 #[allow(unused)]
-fn validate_points(points: &[solver::Point2D]) -> Result<(), PointValidationError> {
-    todo!()
+fn validate_points(points: &BTreeMap<solver::SolverID, solver::Point2D>) -> Result<(), PointValidationError> {
+    let mut names: BTreeSet<solver::SolverID> = BTreeSet::new();
+    let mut positions: Vec<(f64, f64)> = Vec::new();
+
+    const TOLERANCE: f64 = 0.001f64;
+    let to_remove: Vec<usize> = Vec::new();
+    for point in points.values() {
+        if !names.insert(point.id()) {
+            return Err(PointValidationError::DuplicatePoint);
+        }
+
+        let (x, y) = point.coords();
+        if positions.iter().any(|(a, b)| {
+            a - TOLERANCE <= x && x <= a + TOLERANCE && b - TOLERANCE <= y && y <= b + TOLERANCE
+        }) {
+            return Err(PointValidationError::DuplicatePosition);
+        }
+    }
+    Ok(())
 }
 #[allow(unused)]
 fn validate_static_equilibrium() -> Result<(), EquilibriumError> {
     todo!()
 }
+
 /// Takes in a toml::Value::Array and parses it into an array of Point2D for the
 /// solver to use. The function signature doesn't capture this, but the Value passed in
 /// must be the Value::Array(_) variant, or the function will panic (TODO: change to erroring)
@@ -81,16 +118,19 @@ pub(crate) fn parse_points_from_array(
     for entry in raw_table {
         // maybe a tokenize! macro would be useful
         let mut tokens = match entry {
-            Value::Array(a) if a.len() >= 2 => {a.iter()},
+            Value::Array(a) if a.len() >= 2 => a.iter(),
             Value::Array(a) => panic!("Point \'{:?}\' declared with too few values!", a[0]),
-            other => panic!("Error: expecting array of values to parse points from! Saw {:?}", other),
+            other => panic!(
+                "Error: expecting array of values to parse points from! Saw {:?}",
+                other
+            ),
         };
-        
+
         let (id, point_name) = match tokens.next() {
             Some(Value::String(s)) => (solver::SolverID::new(s.as_str()), s.as_str()),
-            other => panic!("Expected a point name (text), but got \'{:?}\'", other)
+            other => panic!("Expected a point name (text), but got \'{:?}\'", other),
         };
-            
+
         let point = match tokens.next() {
             Some(Value::String(s)) if s.as_str() == "Origin" => solver::Point2D::origin(id),
             Some(Value::String(s)) if s.as_str() == "Cartesian" => {
@@ -117,10 +157,14 @@ pub(crate) fn parse_loads_from_array(
 
     for raw_force in raw_forces {
         let mut tokens = array_me!(raw_force).iter();
-        
+
+        #[allow(unused)] // Used in format strings
         let (point_id, name) = match tokens.next() {
             Some(Value::String(s)) => (solver::SolverID::new(s.as_str()), s.as_str()),
-            other => panic!("Expected the name of a point (text), but got \'{:?}\'", other)
+            other => panic!(
+                "Expected the name of a point (text), but got \'{:?}\'",
+                other
+            ),
         };
 
         let magnitude = match tokens.next() {
@@ -148,7 +192,7 @@ pub(crate) fn parse_loads_from_array(
                     panic!("Invalid angle provided for load \'{name}\', expected a number and saw \'{:?}\'", t);
                 }
             }
-            Some(Value::String(s)) => panic!("Load \'{name}\' has in invalid direction: \'{s}\' must be [Up, Down, Left, Right, Polar]"),
+            Some(Value::String(_s)) => panic!("Load \'{name}\' has in invalid direction: \'{_s}\' must be [Up, Down, Left, Right, Polar]"),
             Some(other) => panic!("Invalid value in the direction for force \'{name}\', saw {:?}", other),
             None => panic!("Saw an applied load with no direction! Load \'{name}\' must have a direction"),
         };
@@ -156,9 +200,11 @@ pub(crate) fn parse_loads_from_array(
         // TODO: what to do about parsing these names for loads
         let force = solver::Force2D::new(
             solver::SolverID::new("some load applied"),
-            match points.get(&point_id){
+            match points.get(&point_id) {
                 Some(p) => p.clone(),
-                None => panic!("Loads must be attached to a valid point, \'{name}\' does not exist!"),
+                None => {
+                    panic!("Loads must be attached to a valid point, \'{name}\' does not exist!")
+                }
             },
             direction,
             solver::VectorComponent::KnownExactly(magnitude),
@@ -168,6 +214,7 @@ pub(crate) fn parse_loads_from_array(
     forces
 }
 
+// TODO: add something to get the actual text names from each member
 pub(crate) fn construct_member_pairs(array: &Value) -> Vec<(solver::SolverID, solver::SolverID)> {
     let raw_members = array_me!(array);
     let mut members: Vec<(solver::SolverID, solver::SolverID)> = Vec::new();
@@ -194,16 +241,124 @@ pub(crate) fn construct_member_pairs(array: &Value) -> Vec<(solver::SolverID, so
     members.dedup();
     members
 }
-pub(crate) fn generate_support_reactions(array: &Value) -> Vec<solver::Force2D> {
-    let _raw_supports = array_me!(array);
-    todo!()
-}
-#[allow(unused)]
-pub(crate) fn parse_problem(file: String) -> Vec<solver::TrussJoint2D> {
-    let data = file.parse::<Table>().unwrap();
-    let points = parse_points_from_array(data.get("points").unwrap());
-    let loads = parse_loads_from_array(data.get("loads").unwrap(), &points);
+pub(crate) fn generate_support_reactions(
+    array: &Value,
+    points: &BTreeMap<solver::SolverID, solver::Point2D>,
+) -> Vec<solver::Force2D> {
+    let raw_supports = array_me!(array);
+    let mut support_reactions: Vec<solver::Force2D> = Vec::new();
 
+    for raw_support in raw_supports {
+        let mut tokens = array_me!(raw_support).iter();
+        #[allow(unused)] // used in format strings
+        let (point_id, name) = match tokens.next() {
+            Some(Value::String(s)) => (solver::SolverID::new(s.as_str()), s.as_str()),
+            Some(other) => panic!(
+                "Supports must be attached at pre-defined points! Saw \'{:?}\'",
+                other
+            ),
+            None => panic!("Supports can not be empty! Saw a support with nothing defined"),
+        };
+        let attached_point = match points.get(&point_id) {
+            Some(p) => p,
+            None => panic!(
+                "Supports must be attached to an existing point! Point \'{name}\' does not exist!"
+            ),
+        };
+        enum Support {
+            Roller,
+            Pin,
+        }
+        enum Direction {
+            Up,
+            Down,
+            Left,
+            Right,
+        }
+        let support_type = match tokens.next() {
+            Some(Value::String(s)) if s.as_str() == "Pin" => Support::Pin,
+            Some(Value::String(s)) if s.as_str() == "Roller" => Support::Roller,
+            Some(other) => panic!(
+                "Supports at point \'{name}\'must be one of [Pin, Roller], saw \'{:?}\'",
+                other
+            ),
+            None => panic!("Supports need a type! Support at point {name} has None!"),
+        };
+        match support_type {
+            Support::Pin => {
+                support_reactions.push(solver::Force2D::new(
+                    solver::SolverID::new("TODO: these need to be unique"),
+                    attached_point.clone(),
+                    solver::Direction2D::from_angle(0f64),
+                    solver::VectorComponent::Unknown,
+                ));
+                support_reactions.push(solver::Force2D::new(
+                    solver::SolverID::new("TODO: these need to be unique"),
+                    attached_point.clone(),
+                    solver::Direction2D::from_angle(180f64),
+                    solver::VectorComponent::Unknown,
+                ));
+            }
+            Support::Roller => {
+                let dir = match tokens.next() {
+                    Some(Value::String(s)) if s.as_str() == "Up" => Direction::Up,
+                    Some(Value::String(s)) if s.as_str() == "Down" => Direction::Down,
+                    Some(Value::String(s)) if s.as_str() == "Left" => Direction::Left,
+                    Some(Value::String(s)) if s.as_str() == "Right" => Direction::Right,
+                    Some(other) => panic!("Rollers should have a direction [Up, Down, Left, Right]. Roller at point \'{name}\' has {:?}", other),
+                    None => panic!("Rollers must have a direction! Roller at point \'{name}\' has none!"),
+                };
+                support_reactions.push(solver::Force2D::new(
+                    solver::SolverID::new("Need to be unique"),
+                    attached_point.clone(),
+                    match dir {
+                        Direction::Up => solver::Direction2D::from_angle(90f64),
+                        Direction::Down => solver::Direction2D::from_angle(270f64),
+                        Direction::Left => solver::Direction2D::from_angle(0f64),
+                        Direction::Right => solver::Direction2D::from_angle(180f64),
+                    },
+                    solver::VectorComponent::KnownPositive,
+                ));
+            }
+        };
+    }
+    support_reactions
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum ParsingError {
+    InvalidTOMLFile,
+    IncorrectPoints(PointValidationError),
+    NotInEquilibrium,
+}
+impl Display for ParsingError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::InvalidTOMLFile => write!(f, "invalid TOML file"),
+            Self::IncorrectPoints(e) => write!(f, "incorrectly defined points--{:#?}", e),
+            Self::NotInEquilibrium => write!(f, "the initial problem is not in equilibrium")
+        }
+    }
+}
+impl From<PointValidationError> for ParsingError {
+    fn from(value: PointValidationError) -> Self {
+        ParsingError::IncorrectPoints(value)
+    }
+}
+impl Error for ParsingError {}
+
+#[allow(unused)]
+pub(crate) fn parse_problem(file: String) -> Result<Vec<solver::TrussJoint2D>, ParsingError> {
+    let data = match file.parse::<Table>() {
+        Ok(a) => a,
+        Err(e) => return Err(ParsingError::InvalidTOMLFile),
+    };
+    let points = parse_points_from_array(data.get("points").unwrap());
+    validate_points(&points)?;
+    
+    let loads = parse_loads_from_array(data.get("loads").unwrap(), &points);
+    // TODO: get this working: validate_static_equilibrium()?;
+    
     let members = construct_member_pairs(data.get("members").unwrap());
     let mut internal_forces: Vec<solver::Force2D> = Vec::new();
     for (id1, id2) in members {
@@ -224,7 +379,7 @@ pub(crate) fn parse_problem(file: String) -> Vec<solver::TrussJoint2D> {
         ));
     }
 
-    let support_reactions = generate_support_reactions(data.get("supports").unwrap());
+    let support_reactions = generate_support_reactions(data.get("supports").unwrap(), &points);
 
     let mut joints = {
         let mut map: BTreeMap<solver::SolverID, solver::TrussJoint2D> = BTreeMap::new();
@@ -234,29 +389,16 @@ pub(crate) fn parse_problem(file: String) -> Vec<solver::TrussJoint2D> {
         map
     };
 
-    for force in loads {
+    for force in loads
+        .into_iter()
+        .chain(internal_forces)
+        .chain(support_reactions)
+    {
         let joint = match joints.get_mut(&force.point_id()) {
             Some(j) => j,
-            None => todo!()
+            None => todo!(),
         };
-
         joint.add(force);
     }
-    for force in internal_forces {
-        let joint = match joints.get_mut(&force.point_id()) {
-            Some(j) => j,
-            None => todo!()
-        };
-
-        joint.add(force);
-    }
-    for force in support_reactions {
-        let joint = match joints.get_mut(&force.point_id()) {
-            Some(j) => j,
-            None => todo!()
-        };
-
-        joint.add(force);
-    }
-    joints.into_iter().map(|(id, joint)| joint).collect()
+    Ok(joints.into_iter().map(|(id, joint)| joint).collect())
 }

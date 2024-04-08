@@ -108,6 +108,12 @@ impl Point2D {
         let (dx, dy) = (other.x - self.x, other.y - self.y);
         (dx.powf(2.0) + dy.powf(2.0)).sqrt()
     }
+    pub(crate) fn id(&self) -> SolverID {
+        self.id
+    }
+    pub(crate) fn coords(&self) -> (f64, f64) {
+        (self.x, self.y)
+    }
 }
 impl PartialEq for Point2D {
     fn eq(&self, other: &Self) -> bool {
@@ -168,7 +174,7 @@ pub(crate) enum VectorComponent {
 pub(crate) struct Force2D {
     magnitude: VectorComponent,
     direction: Direction2D,
-    point: Point2D,
+    point: Point2D, // TODO: may at some point replace this with just the point's ID
     id: SolverID,
 }
 impl Force2D {
@@ -254,7 +260,10 @@ impl TrussJoint2D {
         if forces.iter().any(|f| f.point != p) {
             return None;
         }
-        Some(Self { point_id: p.id, forces })
+        Some(Self {
+            point_id: p.id,
+            forces,
+        })
     }
     pub fn add(&mut self, force: Force2D) {
         self.forces.push(force)
@@ -280,7 +289,7 @@ fn find_unknowns(joints: &Vec<TrussJoint2D>) -> Vec<SolverID> {
     unknowns
 }
 
-fn solve_truss(joints: &Vec<TrussJoint2D>) -> Result<Vec<(SolverID, f64)>, ()> {
+pub(crate) fn solve_truss(joints: &Vec<TrussJoint2D>) -> Result<Vec<(SolverID, f64)>, ()> {
     let unknowns = find_unknowns(joints);
     let num_unknowns = unknowns.len();
     if num_unknowns > joints.len() * 2 {
