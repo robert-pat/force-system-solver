@@ -6,10 +6,9 @@ mod tests;
 
 /// Statics problem solver
 fn main() {
-    let file_path = match std::env::args().next() {
-        Some(a) => a,
-        None => ask_user_for_path(),
-    };
+    // skip the program name (arg 1)
+    let file_path = std::env::args().nth(2).unwrap_or_else(ask_user_for_path);
+    
     let file = match std::fs::read_to_string(&file_path) {
         Ok(f) => f,
         Err(e) => panic!("Error opening file: {:?}", e),
@@ -42,7 +41,7 @@ fn main() {
         write!(
             output,
             "{}: {}({})",
-            id_to_name.get(&id).unwrap(),
+            id, //id_to_name.get(&id).unwrap(),
             value,
             if value > 0f64 { "C" } else { "T" }
         )
@@ -51,5 +50,5 @@ fn main() {
 }
 
 fn ask_user_for_path() -> String {
-    todo!()
+    String::from("sample-problems\\problem-one.toml")
 }

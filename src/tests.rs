@@ -1,7 +1,8 @@
 #[cfg(test)]
-use crate::parsing;
-#[cfg(test)]
 use toml::Table;
+
+#[cfg(test)]
+use crate::parsing;
 
 #[test]
 #[allow(non_snake_case)]
