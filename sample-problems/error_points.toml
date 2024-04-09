@@ -1,0 +1,6 @@
+points = [
+    ["ori", "Origin"],
+    ["bet", "Origin"],
+    ["Area 1", "Cartesian", 1, 1],
+    ["Area 2", "Cartesian", 1, 0.999999999999999999999],
+]

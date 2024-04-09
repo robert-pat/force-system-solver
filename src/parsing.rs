@@ -27,29 +27,22 @@ pub(crate) fn get_problem_information(problem: &str) -> ProblemInformation {
 /// function works with both toml::Value::Float and toml::Value::Integer
 fn parse_coordinate_pair(mut value: Iter<Value>, identifier: &str) -> (f64, f64) {
     let (a, b) = (value.next(), value.next());
-    if let (Some(Value::Float(a)), Some(Value::Float(b))) = (a, b) {
-        if value.next().is_some() {
-            eprintln!("Warning! extra items in point definition!");
-            eprintln!(
-                "Point {identifier}: {} has {} extra arguments (they were ignored).",
-                solver::SolverID::new(identifier),
-                value.len() + 1
-            );
-        }
-
-        return (*a, *b);
-    } else if let (Some(Value::Integer(a)), Some(Value::Integer(b))) = (a, b) {
-        if value.next().is_some() {
-            eprintln!("Warning! extra items in point definition!");
-            eprintln!(
-                "Point {identifier}: {} has {} extra arguments (they were ignored).",
-                solver::SolverID::new(identifier),
-                value.len() + 1
-            );
-        }
-
-        return (*a as f64, *b as f64);
+    if value.next().is_some() {
+        eprintln!("Warning! extra items in point definition!");
+        eprintln!(
+            "Point {identifier}: {} has {} extra arguments (they were ignored).",
+            solver::SolverID::new(identifier),
+            value.len() + 1
+        );
     }
+    match (a, b) {
+        (Some(Value::Float(a)), Some(Value::Float(b))) => return (*a, *b),
+        (Some(Value::Integer(a)), Some(Value::Integer(b))) => return (*a as f64, *b as f64),
+        (Some(Value::Float(a)), Some(Value::Integer(b))) => return (*a, *b as f64),
+        (Some(Value::Integer(a)), Some(Value::Float(b))) => return (*a as f64, *b),
+        _ => {}
+    }
+    
     eprintln!("Error: expected two numbers in the format \'a, b\' in the declaration of a point");
     eprintln!(
         "Saw \'{:?}, {:?}\' in the description of point {identifier}: {}.",
@@ -81,11 +74,13 @@ pub enum PointValidationError {
 pub enum EquilibriumError {}
 
 #[allow(unused)]
-fn validate_points(points: &BTreeMap<solver::SolverID, solver::Point2D>) -> Result<(), PointValidationError> {
+pub(crate) fn validate_points(
+    points: &BTreeMap<solver::SolverID, solver::Point2D>,
+) -> Result<(), PointValidationError> {
     let mut names: BTreeSet<solver::SolverID> = BTreeSet::new();
     let mut positions: Vec<(f64, f64)> = Vec::new();
 
-    const TOLERANCE: f64 = 0.001f64;
+    const TOLERANCE: f64 = 0.0001f64;
     let to_remove: Vec<usize> = Vec::new();
     for point in points.values() {
         if !names.insert(point.id()) {
@@ -336,7 +331,7 @@ impl Display for ParsingError {
         match self {
             Self::InvalidTOMLFile => write!(f, "invalid TOML file"),
             Self::IncorrectPoints(e) => write!(f, "incorrectly defined points--{:#?}", e),
-            Self::NotInEquilibrium => write!(f, "the initial problem is not in equilibrium")
+            Self::NotInEquilibrium => write!(f, "the initial problem is not in equilibrium"),
         }
     }
 }
@@ -355,10 +350,10 @@ pub(crate) fn parse_problem(file: String) -> Result<Vec<solver::TrussJoint2D>, P
     };
     let points = parse_points_from_array(data.get("points").unwrap());
     validate_points(&points)?;
-    
+
     let loads = parse_loads_from_array(data.get("loads").unwrap(), &points);
     // TODO: get this working: validate_static_equilibrium()?;
-    
+
     let members = construct_member_pairs(data.get("members").unwrap());
     let mut internal_forces: Vec<solver::Force2D> = Vec::new();
     for (id1, id2) in members {

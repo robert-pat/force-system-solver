@@ -8,7 +8,7 @@ mod tests;
 fn main() {
     // skip the program name (arg 1)
     let file_path = std::env::args().nth(2).unwrap_or_else(ask_user_for_path);
-    
+
     let file = match std::fs::read_to_string(&file_path) {
         Ok(f) => f,
         Err(e) => panic!("Error opening file: {:?}", e),

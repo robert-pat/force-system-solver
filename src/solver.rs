@@ -22,6 +22,11 @@ impl Ord for SolverID {
         self.0.cmp(&other.0)
     }
 }
+impl From<&str> for SolverID {
+    fn from(value: &str) -> Self {
+        SolverID::new(value)
+    }
+}
 impl SolverID {
     pub(crate) fn new(label: &str) -> Self {
         let mut h = DefaultHasher::new();

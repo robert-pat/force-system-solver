@@ -3,6 +3,8 @@ use toml::Table;
 
 #[cfg(test)]
 use crate::parsing;
+use crate::parsing::PointValidationError;
+use crate::solver;
 
 #[test]
 #[allow(non_snake_case)]
@@ -37,4 +39,68 @@ fn read_points_from_file() -> Result<(), ()> {
         parsing::parse_points_from_array(a)
     };
     panic!("{:?}", points);
+}
+
+#[test]
+fn check_point_reading() -> Result<(), ()> {
+    let file = std::fs::read_to_string(r"sample-problems\points-test.toml").unwrap();
+    let toml_data = file.parse::<Table>().unwrap();
+
+    let mut points = parsing::parse_points_from_array(toml_data.get("points").unwrap())
+        .into_iter()
+        .map(|(a, b)| b)
+        .collect::<Vec<_>>();
+    points.sort_by_key(|a| a.id());
+
+    let mut answers: Vec<solver::Point2D> = vec![
+        solver::Point2D::origin("A".into()),
+        solver::Point2D::cartesian("B".into(), 2f64, 0f64),
+        solver::Point2D::polar("C".into(), 2f64, 60f64),
+        solver::Point2D::cartesian("D".into(), 1f64, 1f64),
+        solver::Point2D::origin("E".into()),
+        solver::Point2D::polar("F".into(), 1f64, 90f64),
+    ];
+    answers.sort_by_key(|a| a.id());
+
+    for (calculated, ans) in points.iter().zip(answers.iter()) {
+        if calculated.id() != ans.id() {
+            eprintln!(
+                "Parsed id {} does not match answer id {}. ",
+                calculated.id(),
+                ans.id()
+            );
+            eprintln!("Point {:?} should've been {:?}", calculated, ans);
+            return Err(());
+        }
+        if calculated.coords() != ans.coords() {
+            eprintln!(
+                "Parsed location {:?} does not match answer location {:?}. ",
+                calculated.coords(),
+                ans.coords()
+            );
+            eprintln!("Point {:?} should've been {:?}", calculated, ans);
+            return Err(());
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn check_point_validation() -> Result<(), ()> {
+    let file = std::fs::read_to_string(r"sample-problems/error_points.toml").unwrap();
+    let toml_data = file.parse::<Table>().unwrap();
+
+    let mut points = parsing::parse_points_from_array(toml_data.get("points").unwrap());
+    
+    if parsing::validate_points(&points).is_ok() {
+        eprintln!("Point validation did not error!");
+        return Err(());
+    }
+    points.remove(&solver::SolverID::new("bet"));
+    
+    if parsing::validate_points(&points).unwrap_err() != PointValidationError::DuplicatePosition {
+        eprintln!("Point validation did not error when it should've!");
+        return Err(());
+    }
+    Ok(())
 }

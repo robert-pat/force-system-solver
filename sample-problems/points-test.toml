@@ -5,7 +5,4 @@ points = [
     ["D", "Cartesian", 1, 1],
     ["E", "Origin"],
     ["F", "Polar", 1, 90],
-    ["I", "Polar", 7.33, ], # this will error with missing coordinate
-    ["H", "oops", 1, 1], # this will error with an invalid definition
-    ["I", "Cartesian"], # this will error with missing coordinates
 ]
