@@ -10,6 +10,7 @@ use crate::solver;
 
 pub(crate) struct ProblemInformation {
     pub(crate) name: String,
+    pub(crate) debug_info: bool,
 }
 pub(crate) fn get_problem_information(problem: &str) -> ProblemInformation {
     let table = problem.parse::<Table>().unwrap();
@@ -18,8 +19,12 @@ pub(crate) fn get_problem_information(problem: &str) -> ProblemInformation {
         Some(_) => String::from("(Invalid name--not text)"),
         None => String::from("No name"),
     };
+    let debug_info = match table.get("debug") {
+        Some(Value::Boolean(b)) => *b,
+        _ => false,
+    };
 
-    ProblemInformation { name }
+    ProblemInformation { name, debug_info }
 }
 
 /// Turn an iterator over toml Values into a pair of numbers. This will warn if there are more than 2
@@ -107,7 +112,7 @@ fn validate_static_equilibrium() -> Result<(), EquilibriumError> {
 /// must be the Value::Array(_) variant, or the function will panic (TODO: change to erroring)
 pub(crate) fn parse_points_from_array(
     array: &Value,
-) -> BTreeMap<solver::SolverID, solver::Point2D> {
+) -> (BTreeMap<solver::SolverID, solver::Point2D>, BTreeMap<solver::SolverID, String>) {
     let raw_table = array_me!(array);
     let mut points: BTreeMap<solver::SolverID, solver::Point2D> = BTreeMap::new();
 
@@ -148,7 +153,7 @@ pub(crate) fn parse_points_from_array(
             solver::SolverID::new(point_name)
         );
     }
-    points
+    (points, BTreeMap::new())
 }
 pub(crate) fn parse_loads_from_array(
     array: &Value,
@@ -352,7 +357,7 @@ pub(crate) fn parse_problem(file: String) -> Result<Vec<solver::TrussJoint2D>, P
         Ok(a) => a,
         Err(e) => return Err(ParsingError::InvalidTOMLFile),
     };
-    let points = parse_points_from_array(data.get("points").unwrap());
+    let (points, _) = parse_points_from_array(data.get("points").unwrap());
     validate_points(&points)?;
 
     let loads = parse_loads_from_array(data.get("loads").unwrap(), &points);
