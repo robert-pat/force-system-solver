@@ -36,7 +36,7 @@ fn read_points_from_file() -> Result<(), ()> {
     let data = file.parse::<Table>().unwrap();
     let points = {
         let a = data.get("points").unwrap();
-        parsing::parse_points_from_array(a)
+        parsing::parse_points(a)
     };
     panic!("{:?}", points);
 }
@@ -46,7 +46,7 @@ fn check_point_reading() -> Result<(), ()> {
     let file = std::fs::read_to_string(r"sample-problems\points-test.toml").unwrap();
     let toml_data = file.parse::<Table>().unwrap();
 
-    let mut points = parsing::parse_points_from_array(toml_data.get("points").unwrap())
+    let mut points = parsing::parse_points(toml_data.get("points").unwrap())
         .into_iter()
         .map(|(a, b)| b)
         .collect::<Vec<_>>();
@@ -90,7 +90,7 @@ fn check_point_validation() -> Result<(), ()> {
     let file = std::fs::read_to_string(r"sample-problems/error_points.toml").unwrap();
     let toml_data = file.parse::<Table>().unwrap();
 
-    let mut points = parsing::parse_points_from_array(toml_data.get("points").unwrap());
+    let mut points = parsing::parse_points(toml_data.get("points").unwrap());
 
     if parsing::validate_points(&points).is_ok() {
         eprintln!("Point validation did not error!");

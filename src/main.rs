@@ -21,15 +21,14 @@ fn main() {
         eprintln!("Debug info enabled! The parser & solver will spit out a lot of text!");
     }
 
-
-    let joints = match parsing::parse_problem(file, info.debug_info) {
+    let parsing_result = match parsing::parse_problem(file, info.debug_info) {
         Ok(answer) => answer,
         Err(_) => todo!(),
     };
     // TODO: build up the map between SolverID and actual name in text
     let id_to_name: BTreeMap<solver::SolverID, String> = BTreeMap::new();
 
-    let solutions = match solver::solve_truss(&joints) {
+    let solutions = match solver::solve_truss(&parsing_result.joints) {
         Ok(answer) => answer,
         Err(_) => todo!(),
     };
