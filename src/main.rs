@@ -16,7 +16,7 @@ fn main() {
 
     println!("Statics Problem Solver | Solving the problem at \'{file_path}\'");
     let info = parsing::get_problem_information(&file);
-    println!("Working on problem {}!", info.name);
+    println!("Working on problem: {}!", info.name);
 
     let joints = match parsing::parse_problem(file) {
         Ok(answer) => answer,

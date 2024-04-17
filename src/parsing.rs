@@ -15,8 +15,8 @@ pub(crate) fn get_problem_information(problem: &str) -> ProblemInformation {
     let table = problem.parse::<Table>().unwrap();
     let name = match table.get("name") {
         Some(Value::String(s)) => s.clone(),
-        Some(_other) => String::new(),
-        None => String::new(),
+        Some(_) => String::from("(Invalid name--not text)"),
+        None => String::from("No name"),
     };
 
     ProblemInformation { name }
@@ -42,7 +42,7 @@ fn parse_coordinate_pair(mut value: Iter<Value>, identifier: &str) -> (f64, f64)
         (Some(Value::Integer(a)), Some(Value::Float(b))) => return (*a as f64, *b),
         _ => {}
     }
-    
+
     eprintln!("Error: expected two numbers in the format \'a, b\' in the declaration of a point");
     eprintln!(
         "Saw \'{:?}, {:?}\' in the description of point {identifier}: {}.",
@@ -73,6 +73,7 @@ pub enum PointValidationError {
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum EquilibriumError {}
 
+// TODO: this function should actually do anything
 #[allow(unused)]
 pub(crate) fn validate_points(
     points: &BTreeMap<solver::SolverID, solver::Point2D>,
@@ -140,6 +141,12 @@ pub(crate) fn parse_points_from_array(
             None => panic!("Point missing definition type: point \'{point_name}\' has no location"),
         };
         points.insert(id, point);
+        #[cfg(debug_assertions)]
+        println!(
+            "Parsed point \'{}\' to id {}",
+            point_name,
+            solver::SolverID::new(point_name)
+        );
     }
     points
 }
@@ -177,24 +184,21 @@ pub(crate) fn parse_loads_from_array(
                 solver::Direction2D::from_angle(180.0)
             }
             Some(Value::String(s)) if s.as_str() == "Right" => solver::Direction2D::from_angle(0.0),
-            Some(Value::String(s)) if s.as_str() == "Polar" => {
-                let t = tokens.next();
-                if let Some(Value::Float(f)) = t {
-                    solver::Direction2D::from_angle(*f)
-                } else if let Some(Value::Integer(i)) = t {
-                    solver::Direction2D::from_angle(*i as f64)
-                } else {
-                    panic!("Invalid angle provided for load \'{name}\', expected a number and saw \'{:?}\'", t);
-                }
+            Some(Value::String(s)) if s.as_str() == "Polar" => match tokens.next() {
+                Some(Value::Float(f)) => solver::Direction2D::from_angle(*f),
+                Some(Value::Integer(i)) => solver::Direction2D::from_angle(*i as f64),
+                Some(o) => panic!("Invalid angle provided for load \'{name}\', expected a number and saw \'{:?}\'", o),
+                None => panic!("No direction provided for load \'{name}\'!"),
             }
             Some(Value::String(_s)) => panic!("Load \'{name}\' has in invalid direction: \'{_s}\' must be [Up, Down, Left, Right, Polar]"),
             Some(other) => panic!("Invalid value in the direction for force \'{name}\', saw {:?}", other),
             None => panic!("Saw an applied load with no direction! Load \'{name}\' must have a direction"),
         };
 
-        // TODO: what to do about parsing these names for loads
+        // Note: these names are randomized, but that means we can't get an actual name back
+        let load_name_unique = format!("{name}{}", rand::random::<usize>());
         let force = solver::Force2D::new(
-            solver::SolverID::new("some load applied"),
+            solver::SolverID::new(&load_name_unique),
             match points.get(&point_id) {
                 Some(p) => p.clone(),
                 None => {
@@ -356,9 +360,9 @@ pub(crate) fn parse_problem(file: String) -> Result<Vec<solver::TrussJoint2D>, P
 
     let members = construct_member_pairs(data.get("members").unwrap());
     let mut internal_forces: Vec<solver::Force2D> = Vec::new();
-    for (id1, id2) in members {
-        let new_id = id1.concatenate(id2);
-        let (p1, p2) = (points.get(&id1).unwrap(), points.get(&id2).unwrap());
+    for (id1, id2) in &members {
+        let new_id = id1.concatenate(*id2);
+        let (p1, p2) = (points.get(id1).unwrap(), points.get(id2).unwrap());
         let (d1, d2) = (p1.direction_to(p2), p2.direction_to(p1));
         internal_forces.push(solver::Force2D::new(
             new_id,
@@ -384,6 +388,23 @@ pub(crate) fn parse_problem(file: String) -> Result<Vec<solver::TrussJoint2D>, P
         map
     };
 
+    #[cfg(debug_assertions)] // Printing everything out TODO: move to command line flag instead
+    {
+        eprintln!("Debug Assertions Enabled! Spitting out what the parser found:");
+        println!("Points (as parsed by the parser):");
+        println!("{:#?}", points);
+        println!();
+        println!("External loads (as parsed by the parser):");
+        println!("{:#?}", loads);
+        println!();
+        print!("Internal forces & members (as parsed):");
+        println!("{:#?}", internal_forces);
+        println!("Members: {:#?}", members);
+        println!();
+        println!("Support reactions (as parsed):");
+        println!("{:#?}", support_reactions);
+    }
+
     for force in loads
         .into_iter()
         .chain(internal_forces)
@@ -395,5 +416,11 @@ pub(crate) fn parse_problem(file: String) -> Result<Vec<solver::TrussJoint2D>, P
         };
         joint.add(force);
     }
+    #[cfg(debug_assertions)]
+    {
+        println!("Forced mapped to joints:");
+        println!("{:#?}", joints);
+    }
+
     Ok(joints.into_iter().map(|(id, joint)| joint).collect())
 }

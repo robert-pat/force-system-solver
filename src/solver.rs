@@ -2,6 +2,7 @@
 
 use nalgebra as na;
 
+use itertools::Itertools;
 use nalgebra::DMatrix;
 use std::cmp::Ordering;
 use std::collections::hash_map::DefaultHasher;
@@ -120,6 +121,11 @@ impl Point2D {
         (self.x, self.y)
     }
 }
+impl std::fmt::Display for Point2D {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "({}, {}) {}", self.x, self.y, self.id)
+    }
+}
 impl PartialEq for Point2D {
     fn eq(&self, other: &Self) -> bool {
         self.id == other.id
@@ -157,6 +163,11 @@ impl PartialEq for Direction2D {
         self.x == other.x && self.y == other.y
     }
 }
+impl std::fmt::Display for Direction2D {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "<{}, {}>", self.x, self.y)
+    }
+}
 
 /// Represents one component of a vector, along any axis.
 ///
@@ -175,7 +186,7 @@ pub(crate) enum VectorComponent {
     KnownExactly(f64),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct Force2D {
     magnitude: VectorComponent,
     direction: Direction2D,
@@ -199,6 +210,13 @@ impl Force2D {
     }
 }
 
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub(crate) enum JointToEquationError {
+    ForceHasDifferentPoint,
+    TemplateEmpty,
+    NoForcesGiven,
+    TemplateDoesNotHaveForce,
+}
 /// Takes in a set of forces and a template for what order the row vector should be constructed in.
 /// The function then creates two row vectors representing the net force equations for the forces
 /// in the x and y directions. The last item in each vector is the result of the equation (C) in
@@ -211,16 +229,21 @@ impl Force2D {
 pub(crate) fn get_rows_from_joint(
     forces: &[Force2D],
     template: &[SolverID], //TODO: should this be changed to &BTreeMap<SolverID, usize> ?
-) -> Result<(Vec<f64>, Vec<f64>), ()> {
-    if forces.is_empty() || template.is_empty() {
-        return Err(());
+) -> Result<(Vec<f64>, Vec<f64>), JointToEquationError> {
+    if forces.is_empty() {
+        return Err(JointToEquationError::NoForcesGiven);
+    }
+    if template.is_empty() {
+        return Err(JointToEquationError::TemplateEmpty);
     }
     let point = forces[0].point.clone();
     if forces.iter().any(|f| f.point != point) {
-        return Err(());
+        return Err(JointToEquationError::ForceHasDifferentPoint);
     }
-    if forces.iter().any(|f| !template.contains(&f.id)) {
-        return Err(());
+    if forces.iter().any(|f| {
+        !matches!(f.magnitude, VectorComponent::KnownExactly(_)) && !template.contains(&f.id)
+    }) {
+        return Err(JointToEquationError::TemplateDoesNotHaveForce);
     }
 
     let mut keys: BTreeMap<SolverID, usize> = {
@@ -256,6 +279,7 @@ pub(crate) fn get_rows_from_joint(
     Ok((x_coefficients, y_coefficients))
 }
 
+#[derive(Debug)]
 pub(crate) struct TrussJoint2D {
     point_id: SolverID,
     forces: Vec<Force2D>,
@@ -285,6 +309,9 @@ fn find_unknowns(joints: &Vec<TrussJoint2D>) -> Vec<SolverID> {
     let mut unknowns: Vec<SolverID> = Vec::new();
     for joint in joints {
         for force in &joint.forces {
+            if let VectorComponent::KnownExactly(_) = force.magnitude {
+                continue;
+            }
             unknowns.push(force.id);
         }
     }
@@ -293,56 +320,86 @@ fn find_unknowns(joints: &Vec<TrussJoint2D>) -> Vec<SolverID> {
     unknowns.dedup();
     unknowns
 }
-pub(crate) fn solve_truss(joints: &Vec<TrussJoint2D>) -> Result<Vec<(SolverID, f64)>, ()> {
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub(crate) enum SolvingError {
+    NoMatrixWorked,
+}
+pub(crate) fn solve_truss(
+    joints: &Vec<TrussJoint2D>,
+) -> Result<Vec<(SolverID, f64)>, SolvingError> {
     let unknowns = find_unknowns(joints);
     let num_unknowns = unknowns.len();
+
     if num_unknowns > joints.len() * 2 {
         // The solution can't be fully constrained
         todo!()
     };
-    
-    let mut coefficients = Vec::new();
-    let mut constants: Vec<f64> = Vec::new();
-    
+
+    #[cfg(debug_assertions)]
+    {
+        println!("Debug assertions are enabled! Spitting out solver information!");
+        println!(
+            "Solving for {num_unknowns} unknowns with {} joints.",
+            joints.len()
+        );
+        println!("Unknowns: {:?}", unknowns);
+    }
+
+    let mut potential_rows: Vec<Vec<f64>> = Vec::new();
     for joint in joints {
         let (mut x, mut y) = get_rows_from_joint(&joint.forces, &unknowns).unwrap();
 
         assert_eq!(x.len(), num_unknowns + 1);
         assert_eq!(y.len(), num_unknowns + 1);
 
-        constants.push(x.pop().unwrap());
-        constants.push(y.pop().unwrap());
+        // floating point numbers (bc 0 vs non-zero in a matrix matters lots)
+        const TOLERANCE: f64 = 0.00000001;
+        for v in x.iter_mut() {
+            if (-TOLERANCE..=TOLERANCE).contains(v) {
+                *v = 0f64;
+            }
+        }
+        for v in y.iter_mut() {
+            if (-TOLERANCE..=TOLERANCE).contains(v) {
+                *v = 0f64;
+            }
+        }
 
-        coefficients.extend(x);
-        coefficients.extend(y);
-    }
-    
-    /* This will probably not work bc it will require matching the rows between the two matrices*/ 
-    let mut coefficient_matrix = na::DMatrix::from_row_slice(
-        coefficients.len() / num_unknowns,
-        num_unknowns,
-        &coefficients
-    );
-    let mut constant_matrix = na::DMatrix::from_column_slice(constants.len(), 1, &constants);
-    
-    if coefficient_matrix.column_iter().any(|c| c.sum() == 0f64) {
-        // TODO: better panic!(), or return result
-        panic!("Unsolvable system, one or more unknowns does not appear in any equation for equilibrium!");
+        potential_rows.push(x);
+        potential_rows.push(y);
     }
 
-    // TODO: eliminate rows to ensure that every variable is in at least 1 equation
-    //  and the matrix is square; use .remove_column() and .remove_row() methods
-    
-    assert_eq!(coefficient_matrix.len(), num_unknowns.pow(2));
-    assert_eq!(constant_matrix.len(), num_unknowns);
-    let inverse = match coefficient_matrix.try_inverse() {
-        Some(i) => i,
-        None => panic!("Singular matrix generated in the solving process! Check that the problem is solvable."),
-    };
+    for combination in potential_rows.iter().combinations(num_unknowns) {
+        let mut coefficients: Vec<f64> = Vec::new();
+        let mut constants: Vec<f64> = Vec::new();
+        for row in combination {
+            let mut row = row.to_owned();
+            constants.push(row.pop().unwrap());
+            coefficients.extend(row);
+        }
 
-    let answers = inverse * constant_matrix;
-    Ok(unknowns
-        .into_iter()
-        .zip(answers.iter().copied())
-        .collect::<Vec<_>>())
+        let coefficient_matrix =
+            na::DMatrix::from_row_slice(num_unknowns, num_unknowns, &coefficients);
+        let constant_matrix = na::DMatrix::from_column_slice(constants.len(), 1, &constants);
+
+        assert_eq!(coefficient_matrix.len(), num_unknowns.pow(2));
+        assert_eq!(constant_matrix.len(), num_unknowns);
+
+        let inverse = match coefficient_matrix.try_inverse() {
+            Some(i) => i,
+            None => {
+                // TODO: print out the failed matrices in debug mode
+                // #[cfg(debug_assertions)]
+                // println!("Debug assertion! Tried to invert matrix {:?}", coefficient_matrix);
+                continue;
+            }
+        };
+        let answer = inverse * constant_matrix;
+        return Ok(unknowns
+            .into_iter()
+            .zip(answer.iter().copied())
+            .collect::<Vec<_>>());
+    }
+    panic!();
 }

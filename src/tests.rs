@@ -91,16 +91,22 @@ fn check_point_validation() -> Result<(), ()> {
     let toml_data = file.parse::<Table>().unwrap();
 
     let mut points = parsing::parse_points_from_array(toml_data.get("points").unwrap());
-    
+
     if parsing::validate_points(&points).is_ok() {
         eprintln!("Point validation did not error!");
         return Err(());
     }
     points.remove(&solver::SolverID::new("bet"));
-    
+
     if parsing::validate_points(&points).unwrap_err() != PointValidationError::DuplicatePosition {
         eprintln!("Point validation did not error when it should've!");
         return Err(());
     }
     Ok(())
+}
+
+#[test]
+fn check_load_parsing() -> Result<(), ()> {
+    // we currently generate too many unknown forces is the solver somehow
+    todo!()
 }
