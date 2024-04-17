@@ -11,6 +11,7 @@ use crate::solver;
 pub(crate) struct ProblemInformation {
     pub(crate) name: String,
     pub(crate) debug_info: bool,
+    pub(crate) file_write: bool,
 }
 pub(crate) fn get_problem_information(problem: &str) -> ProblemInformation {
     let table = problem.parse::<Table>().unwrap();
@@ -23,8 +24,12 @@ pub(crate) fn get_problem_information(problem: &str) -> ProblemInformation {
         Some(Value::Boolean(b)) => *b,
         _ => false,
     };
+    let file_write = match table.get("write-file") {
+        Some(Value::Boolean(b)) => *b,
+        _ => false,
+    };
 
-    ProblemInformation { name, debug_info }
+    ProblemInformation { name, debug_info, file_write }
 }
 
 /// Turn an iterator over toml Values into a pair of numbers. This will warn if there are more than 2
@@ -351,8 +356,12 @@ impl From<PointValidationError> for ParsingError {
 }
 impl Error for ParsingError {}
 
+struct ParsedProblem {
+    name_map: BTreeMap<solver::SolverID, String>,
+    joints: Vec<solver::TrussJoint2D>,
+}
 #[allow(unused)]
-pub(crate) fn parse_problem(file: String) -> Result<Vec<solver::TrussJoint2D>, ParsingError> {
+pub(crate) fn parse_problem(file: String, debug_info: bool) -> Result<Vec<solver::TrussJoint2D>, ParsingError> {
     let data = match file.parse::<Table>() {
         Ok(a) => a,
         Err(e) => return Err(ParsingError::InvalidTOMLFile),
@@ -410,11 +419,7 @@ pub(crate) fn parse_problem(file: String) -> Result<Vec<solver::TrussJoint2D>, P
         println!("{:#?}", support_reactions);
     }
 
-    for force in loads
-        .into_iter()
-        .chain(internal_forces)
-        .chain(support_reactions)
-    {
+    for force in loads.into_iter().chain(internal_forces).chain(support_reactions) {
         let joint = match joints.get_mut(&force.point_id()) {
             Some(j) => j,
             None => todo!(),

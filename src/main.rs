@@ -6,19 +6,23 @@ mod tests;
 
 /// Statics problem solver
 fn main() {
-    // skip the program name (arg 1)
+    // get the file we need, skip the program name (arg 1)
     let file_path = std::env::args().nth(2).unwrap_or_else(ask_user_for_path);
-
     let file = match std::fs::read_to_string(&file_path) {
         Ok(f) => f,
         Err(e) => panic!("Error opening file: {:?}", e),
     };
 
-    println!("Statics Problem Solver | Solving the problem at \'{file_path}\'");
+    // startup
     let info = parsing::get_problem_information(&file);
+    println!("Statics Problem Solver | Solving the problem at \'{file_path}\'");
     println!("Working on problem: {}!", info.name);
+    if info.debug_info {
+        eprintln!("Debug info enabled! The parser & solver will spit out a lot of text!");
+    }
 
-    let joints = match parsing::parse_problem(file) {
+
+    let joints = match parsing::parse_problem(file, info.debug_info) {
         Ok(answer) => answer,
         Err(_) => todo!(),
     };
