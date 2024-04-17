@@ -5,7 +5,7 @@ use nalgebra as na;
 use nalgebra::DMatrix;
 use std::cmp::Ordering;
 use std::collections::hash_map::DefaultHasher;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::fmt::Formatter;
 use std::hash::Hasher;
 use std::ops::Mul;
@@ -293,7 +293,6 @@ fn find_unknowns(joints: &Vec<TrussJoint2D>) -> Vec<SolverID> {
     unknowns.dedup();
     unknowns
 }
-
 pub(crate) fn solve_truss(joints: &Vec<TrussJoint2D>) -> Result<Vec<(SolverID, f64)>, ()> {
     let unknowns = find_unknowns(joints);
     let num_unknowns = unknowns.len();
@@ -301,18 +300,14 @@ pub(crate) fn solve_truss(joints: &Vec<TrussJoint2D>) -> Result<Vec<(SolverID, f
         // The solution can't be fully constrained
         todo!()
     };
-
-    // TODO: we can't just use any equations arbitrarily:
-    //  We add equations so that each unknown has at least 1 non-zero spot
-    //  then we just add whatever equations we have
-    //  see .iter().cycle() and just keep track of what's been added so far
+    
     let mut coefficients = Vec::new();
     let mut constants: Vec<f64> = Vec::new();
-
+    
     for joint in joints {
         let (mut x, mut y) = get_rows_from_joint(&joint.forces, &unknowns).unwrap();
 
-        assert_eq!(x.len(), num_unknowns + 1); // TODO: maybe should not just assert?
+        assert_eq!(x.len(), num_unknowns + 1);
         assert_eq!(y.len(), num_unknowns + 1);
 
         constants.push(x.pop().unwrap());
@@ -321,19 +316,31 @@ pub(crate) fn solve_truss(joints: &Vec<TrussJoint2D>) -> Result<Vec<(SolverID, f
         coefficients.extend(x);
         coefficients.extend(y);
     }
+    
+    /* This will probably not work bc it will require matching the rows between the two matrices*/ 
+    let mut coefficient_matrix = na::DMatrix::from_row_slice(
+        coefficients.len() / num_unknowns,
+        num_unknowns,
+        &coefficients
+    );
+    let mut constant_matrix = na::DMatrix::from_column_slice(constants.len(), 1, &constants);
+    
+    if coefficient_matrix.column_iter().any(|c| c.sum() == 0f64) {
+        // TODO: better panic!(), or return result
+        panic!("Unsolvable system, one or more unknowns does not appear in any equation for equilibrium!");
+    }
 
-    assert_eq!(coefficients.len(), num_unknowns.pow(2));
-    assert_eq!(constants.len(), num_unknowns);
-
-    let mut m = na::DMatrix::from_row_slice(num_unknowns, num_unknowns, &coefficients);
-    let mut b = na::DMatrix::from_column_slice(num_unknowns, 1, &constants);
-
-    let inverse = match m.try_inverse() {
+    // TODO: eliminate rows to ensure that every variable is in at least 1 equation
+    //  and the matrix is square; use .remove_column() and .remove_row() methods
+    
+    assert_eq!(coefficient_matrix.len(), num_unknowns.pow(2));
+    assert_eq!(constant_matrix.len(), num_unknowns);
+    let inverse = match coefficient_matrix.try_inverse() {
         Some(i) => i,
-        None => panic!(),
+        None => panic!("Singular matrix generated in the solving process! Check that the problem is solvable."),
     };
 
-    let answers = inverse * b;
+    let answers = inverse * constant_matrix;
     Ok(unknowns
         .into_iter()
         .zip(answers.iter().copied())
