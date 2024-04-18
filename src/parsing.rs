@@ -214,7 +214,7 @@ pub(crate) fn parse_loads(
         };
 
         // Note: these names are randomized, but that means we can't get an actual name back
-        let load_name_unique = format!("{point_name}{}", rand::random::<usize>());
+        let load_name_unique = format!("Load {point_name}{}", rand::random::<usize>());
         let force = Force2D::new(
             SolverID::new(&load_name_unique),
             match points.get(&point_id) {
@@ -281,13 +281,13 @@ pub(crate) fn generate_support_reactions(
         match support_type {
             Support::Pin => {
                 support_reactions.push(Force2D::new(
-                    SolverID::new("TODO: these need to be unique"),
+                    SolverID::new("TODO: these need to be unique"), //TODO: unique names
                     attached_point.clone(),
                     Direction2D::from_angle(0f64),
                     solver::VectorComponent::Unknown,
                 ));
                 support_reactions.push(Force2D::new(
-                    SolverID::new("TODO: these need to be unique"),
+                    SolverID::new("TODO: these need to be unique"), // TODO: unique names
                     attached_point.clone(),
                     Direction2D::from_angle(180f64),
                     solver::VectorComponent::Unknown,
@@ -303,7 +303,7 @@ pub(crate) fn generate_support_reactions(
                     None => panic!("Rollers must have a direction! Roller at point \'{name}\' has none!"),
                 };
                 support_reactions.push(Force2D::new(
-                    SolverID::new("Need to be unique"),
+                    SolverID::new("Need to be unique"), // TODO: unique names
                     attached_point.clone(),
                     match dir {
                         Direction::Up => Direction2D::from_angle(90f64),
@@ -412,7 +412,6 @@ pub(crate) fn parse_problem(file: String, debug_info: bool) -> Result<ParsedProb
         &mut names_record,
         debug_info,
     );
-    validate_points(&points)?;
 
     let internal_forces = generate_internal_forces(
         toml_file
@@ -430,13 +429,14 @@ pub(crate) fn parse_problem(file: String, debug_info: bool) -> Result<ParsedProb
         &mut names_record,
     );
 
-    // TODO: get this working: validate_static_equilibrium()?;
     let support_reactions = generate_support_reactions(
         toml_file
             .get("supports")
             .expect("TOML file must define a \'supports\' array"),
         &points,
     );
+
+    // TODO: include the validations for points, forces, and whatever else
 
     let mut joints = {
         let mut map: BTreeMap<SolverID, TrussJoint2D> = BTreeMap::new();

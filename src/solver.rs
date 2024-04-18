@@ -281,8 +281,8 @@ pub(crate) fn get_rows_from_joint(
 
 #[derive(Debug)]
 pub(crate) struct TrussJoint2D {
-    point_id: SolverID,
-    forces: Vec<Force2D>,
+    pub(crate) point_id: SolverID,
+    pub(crate) forces: Vec<Force2D>,
 }
 impl TrussJoint2D {
     pub(crate) fn new(p: Point2D, forces: Vec<Force2D>) -> Option<Self> {

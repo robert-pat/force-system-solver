@@ -20,6 +20,7 @@ fn main() {
         if info.file_write {
             eprintln!("Warning: Debug printing to a file is not yet supported, sorry!");
             eprintln!("Use \'[command] >> name.txt\' to pipe the output to name.txt (windows).");
+            eprintln!();
         }
     }
 
@@ -28,6 +29,19 @@ fn main() {
         Err(_) => todo!(),
     };
     let (joints, name_conversion) = (problem.joints, problem.name_map);
+    if info.debug_info {
+        println!("Name Conversion:");
+        for (id, name) in name_conversion.iter() {
+            println!("Id {} is \'{}\'", id, name);
+        }
+        println!();
+        
+        for joint in &joints {
+            println!("Joint [{}]", joint.point_id);
+            println!("{:?}", joint.forces);
+            println!();
+        }
+    }
 
     let solutions = match solver::solve_truss(&joints) {
         Ok(answer) => answer,
@@ -79,6 +93,7 @@ fn ask_user_for_path() -> String {
     if !s.chars().any(|c| !c.is_ascii_whitespace()) {
         eprintln!("Entered file path is empty, using a sample problem!");
         eprintln!("Expecting the sample problem: \'sample-problems\\problem-one.toml\'");
+        eprintln!();
         return String::from("sample-problems\\problem-one.toml");
     }
     s
