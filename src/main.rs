@@ -35,7 +35,7 @@ fn main() {
             println!("Id {} is \'{}\'", id, name);
         }
         println!();
-        
+
         for joint in &joints {
             println!("Joint [{}]", joint.point_id);
             println!("{:?}", joint.forces);
@@ -79,6 +79,7 @@ fn main() {
             );
         }
     }
+    println!("Solving Complete, Program Quitting!");
 }
 
 fn ask_user_for_path() -> String {
@@ -96,5 +97,5 @@ fn ask_user_for_path() -> String {
         eprintln!();
         return String::from("sample-problems\\problem-one.toml");
     }
-    s
+    s.trim().to_string() // I know, I know
 }

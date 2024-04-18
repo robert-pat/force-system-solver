@@ -7,6 +7,7 @@ description = "The first test case used to solve statices problems, checked by h
 debug = false
 write-file = false
 
+# unused (for now?):
 # weight = { applied = false, type = "density", magnitude = 1 } # unused, maybe remove
 
 # defining a point: "name", "definition strategy", <x or r>, <y or theta>

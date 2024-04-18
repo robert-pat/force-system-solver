@@ -1,0 +1,24 @@
+# version, name = "", description = "", debug = false, write-file = false,
+version = 0
+name = "Problem 2 :)"
+description = "A harder, but still simple statics problem."
+debug = false
+write-file = false
+
+# defining a point: "name", "definition strategy", <x or r>, <y or theta>
+points = [
+]
+
+# members = [ [point name, point name], ... ]
+members = [
+]
+
+# loads = [ [point name, direction, <angle>], ...]
+loads = [
+]
+
+# currently only accepts pin and roller
+supports = [
+    #["C", "Pin"],
+    #["A", "Roller", "Down]
+]
