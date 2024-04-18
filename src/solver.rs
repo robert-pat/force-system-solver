@@ -336,16 +336,6 @@ pub(crate) fn solve_truss(
         todo!()
     };
 
-    #[cfg(debug_assertions)]
-    {
-        println!("Debug assertions are enabled! Spitting out solver information!");
-        println!(
-            "Solving for {num_unknowns} unknowns with {} joints.",
-            joints.len()
-        );
-        println!("Unknowns: {:?}", unknowns);
-    }
-
     let mut potential_rows: Vec<Vec<f64>> = Vec::new();
     for joint in joints {
         let (mut x, mut y) = get_rows_from_joint(&joint.forces, &unknowns).unwrap();

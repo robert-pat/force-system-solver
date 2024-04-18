@@ -1,5 +1,3 @@
-use std::collections::BTreeMap;
-
 mod parsing;
 mod solver;
 mod tests;
@@ -19,39 +17,69 @@ fn main() {
     println!("Working on problem: {}!", info.name);
     if info.debug_info {
         eprintln!("Debug info enabled! The parser & solver will spit out a lot of text!");
+        if info.file_write {
+            eprintln!("Warning: Debug printing to a file is not yet supported, sorry!");
+            eprintln!("Use \'[command] >> name.txt\' to pipe the output to name.txt (windows).");
+        }
     }
 
-    let parsing_result = match parsing::parse_problem(file, info.debug_info) {
+    let problem = match parsing::parse_problem(file, info.debug_info) {
         Ok(answer) => answer,
         Err(_) => todo!(),
     };
-    // TODO: build up the map between SolverID and actual name in text
-    let id_to_name: BTreeMap<solver::SolverID, String> = BTreeMap::new();
+    let (joints, name_conversion) = (problem.joints, problem.name_map);
 
-    let solutions = match solver::solve_truss(&parsing_result.joints) {
+    let solutions = match solver::solve_truss(&joints) {
         Ok(answer) => answer,
         Err(_) => todo!(),
     };
 
+    // TODO: I don't love how this code is, but its fine for now
     use std::io::Write;
-    let mut output = std::fs::OpenOptions::new()
-        .append(true)
-        .write(true)
-        .create(true)
-        .open(format!("answer-{}", info.name))
-        .unwrap();
-    for (id, value) in solutions {
-        write!(
-            output,
-            "{}: {}({})",
-            id, //id_to_name.get(&id).unwrap(),
-            value,
-            if value > 0f64 { "C" } else { "T" }
-        )
-        .expect("");
+    if info.file_write {
+        let mut output = std::fs::OpenOptions::new()
+            .append(true)
+            .write(true)
+            .create(true)
+            .open(format!("answer-{}", info.name))
+            .unwrap();
+        for (id, value) in solutions {
+            writeln!(
+                output,
+                "Member {} [{}]: {}({})",
+                name_conversion.get(&id).unwrap(),
+                id,
+                value,
+                if value > 0f64 { "C" } else { "T" }
+            )
+            .expect("Could not write solution to file! Programming Issue.");
+        }
+    } else {
+        for (id, value) in solutions {
+            println!(
+                "Member {} [{}]: {}({})",
+                name_conversion.get(&id).unwrap(),
+                id,
+                value,
+                if value > 0f64 { "C" } else { "T" }
+            );
+        }
     }
 }
 
 fn ask_user_for_path() -> String {
-    String::from("sample-problems\\problem-one.toml")
+    println!("Please enter a file path to the problem you would like solved.");
+    println!("This path should be relative to the current directory:");
+    let mut s = String::new();
+    std::io::stdin()
+        .read_line(&mut s)
+        .expect("Failed to read std in! Programming Issue.");
+
+    // if any of the characters are not whitespace, that's a path, otherwise default
+    if !s.chars().any(|c| !c.is_ascii_whitespace()) {
+        eprintln!("Entered file path is empty, using a sample problem!");
+        eprintln!("Expecting the sample problem: \'sample-problems\\problem-one.toml\'");
+        return String::from("sample-problems\\problem-one.toml");
+    }
+    s
 }
