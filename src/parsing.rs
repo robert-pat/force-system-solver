@@ -235,40 +235,6 @@ pub(crate) fn parse_loads(
     forces
 }
 
-// TODO: add something to get the actual text names from each member
-pub(crate) fn construct_member_pairs(
-    array: &Value,
-    names: &mut BTreeMap<SolverID, String>,
-) -> Vec<(SolverID, SolverID)> {
-    let raw_members = array_me!(array);
-    let mut members: Vec<(SolverID, SolverID)> = Vec::new();
-
-    for raw_member in raw_members {
-        let mut tokens = array_me!(raw_member).iter();
-
-        // To ensure that the member AB should have the same order at member BA, so we sort
-        let pair = match (tokens.next(), tokens.next()) {
-            (Some(Value::String(s1)), Some(Value::String(s2))) => match s1.cmp(s2) {
-                Ordering::Greater => {
-                    (SolverID::new(s1.as_str()), SolverID::new(s2.as_str()))
-                },
-                Ordering::Less => {
-                    (SolverID::new(s2.as_str()), SolverID::new(s1.as_str()))
-                },
-                // this assumes the Ordering::Equal strings are actually the same string
-                Ordering::Equal => {eprintln!("Non-existent member declared! {:?}, {:?}", s1, s2); continue},
-            },
-            (a, b) => panic!("Incorrect structural member definition! Expected \'point1 name, point2 name\', got \'{:?}, {:?}\'", a, b)
-        };
-        members.push(pair);
-    }
-
-    // this should be fine? bc the elements to remove should be identical so doesn't matter how
-    // they're sorted ??
-    members.sort();
-    members.dedup();
-    members
-}
 pub(crate) fn generate_support_reactions(
     array: &Value,
     points: &BTreeMap<SolverID, Point2D>,
@@ -359,7 +325,32 @@ fn generate_internal_forces(
     points: &BTreeMap<SolverID, Point2D>,
 ) -> Vec<Force2D> {
     let mut internal_forces: Vec<Force2D> = Vec::new();
-    let members = construct_member_pairs(array, name_map);
+    let raw_members = array_me!(array);
+    let mut members: Vec<(SolverID, SolverID)> = Vec::new();
+
+    for raw_member in raw_members {
+        let mut tokens = array_me!(raw_member).iter();
+
+        // To ensure that the member AB should have the same order at member BA, so we sort
+        // the name map part is bad, but it will prob work for now
+        let (name1, name2) = match (tokens.next(), tokens.next()) {
+            (Some(Value::String(s1)), Some(Value::String(s2))) => match s1.cmp(s2) {
+                Ordering::Greater => (s1, s2),
+                Ordering::Less => (s2, s1),
+                Ordering::Equal => {eprintln!("Non-existent member declared! {:?}, {:?}", s1, s2); continue}
+            }
+            (a, b) => panic!("Incorrect structural member definition! Expected \'point1 name, point2 name\', got \'{:?}, {:?}\'", a, b)
+        };
+        let (id1, id2) = (SolverID::new(name1), SolverID::new(name2));
+        // ideally this would only be done w/ the de-duped list, but I can't currently think of how
+        name_map.insert(id1.concatenate(id2), format!("{}<->{}", name1, name2));
+        members.push((id1, id2));
+    }
+
+    // this should be fine? bc the elements to remove should be identical so doesn't matter how
+    // they're sorted ??
+    members.sort();
+    members.dedup();
 
     for (id1, id2) in &members {
         let new_id = id1.concatenate(*id2);
@@ -440,7 +431,12 @@ pub(crate) fn parse_problem(file: String, debug_info: bool) -> Result<ParsedProb
     );
 
     // TODO: get this working: validate_static_equilibrium()?;
-    let support_reactions = generate_support_reactions(toml_file.get("supports").unwrap(), &points);
+    let support_reactions = generate_support_reactions(
+        toml_file
+            .get("supports")
+            .expect("TOML file must define a \'supports\' array"),
+        &points,
+    );
 
     let mut joints = {
         let mut map: BTreeMap<SolverID, TrussJoint2D> = BTreeMap::new();
@@ -457,13 +453,13 @@ pub(crate) fn parse_problem(file: String, debug_info: bool) -> Result<ParsedProb
     {
         let joint = match joints.get_mut(&force.point_id()) {
             Some(j) => j,
-            None => todo!(),
+            None => panic!("Force {:?}'s point ID did not match any joints!", force),
         };
         joint.add(force);
     }
 
     Ok(ParsedProblem {
         name_map: names_record,
-        joints: joints.into_iter().map(|(id, joint)| joint).collect(),
+        joints: joints.into_values().collect(),
     })
 }
