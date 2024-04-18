@@ -2,19 +2,31 @@
 version = 0
 name = "Problem 2 :)"
 description = "A harder, but still simple statics problem."
-debug = false
+debug = true
 write-file = false
 
 # defining a point: "name", "definition strategy", <x or r>, <y or theta>
 points = [
+    ["A", "Origin"],
+    ["B", "Cartesian", 0, 2],
+    ["C", "Cartesian", 2, 0],
+    ["D", "Polar", 2, -60],
 ]
 
 # members = [ [point name, point name], ... ]
 members = [
+    ["A", "B"],
+    ["A", "C"],
+    ["B", "C"],
+    ["A", "D"],
+    ["C", "D"],
 ]
 
 # loads = [ [point name, direction, <angle>], ...]
 loads = [
+    ["B", 50, "Right"],
+    ["D", 50, "Right"],
+    ["C", 100, "Left"],
 ]
 
 # currently only accepts pin and roller

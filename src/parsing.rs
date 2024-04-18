@@ -96,7 +96,7 @@ pub(crate) fn validate_points(
     let mut names: BTreeSet<SolverID> = BTreeSet::new();
     let mut positions: Vec<(f64, f64)> = Vec::new();
 
-    const TOLERANCE: f64 = 0.0001f64;
+    const TOLERANCE: f64 = 0.00001f64;
     let to_remove: Vec<usize> = Vec::new();
     for point in points.values() {
         if !names.insert(point.id()) {

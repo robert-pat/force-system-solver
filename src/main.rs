@@ -1,3 +1,5 @@
+use crate::solver::SolvingError;
+
 mod parsing;
 mod solver;
 mod tests;
@@ -13,10 +15,13 @@ fn main() {
 
     // startup
     let info = parsing::get_problem_information(&file);
+    println!("..........");
     println!("Statics Problem Solver | Solving the problem at \'{file_path}\'");
     println!("Working on problem: {}!", info.name);
     if info.debug_info {
+        eprintln!("------------");
         eprintln!("Debug info enabled! The parser & solver will spit out a lot of text!");
+        eprintln!("------------");
         if info.file_write {
             eprintln!("Warning: Debug printing to a file is not yet supported, sorry!");
             eprintln!("Use \'[command] >> name.txt\' to pipe the output to name.txt (windows).");
@@ -37,15 +42,13 @@ fn main() {
         println!();
 
         for joint in &joints {
-            println!("Joint [{}]", joint.point_id);
-            println!("{:?}", joint.forces);
-            println!();
+            println!("{}", joint);
         }
     }
 
-    let solutions = match solver::solve_truss(&joints) {
+    let solutions = match solver::solve_truss(&joints, info.debug_info) {
         Ok(answer) => answer,
-        Err(_) => todo!(),
+        Err(SolvingError::NoMatrixWorked) => panic!("No invertible matrix found for this problem!"),
     };
 
     // TODO: I don't love how this code is, but its fine for now

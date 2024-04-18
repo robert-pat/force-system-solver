@@ -165,7 +165,7 @@ impl PartialEq for Direction2D {
 }
 impl std::fmt::Display for Direction2D {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "<{}, {}>", self.x, self.y)
+        write!(f, "< {}, {} >", self.x, self.y)
     }
 }
 
@@ -304,6 +304,22 @@ impl TrussJoint2D {
         }
     }
 }
+impl std::fmt::Display for TrussJoint2D {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "Joint for point {}:", self.point_id)?;
+        for force in &self.forces {
+            write!(f, "-> Force of ")?;
+            match &force.magnitude {
+                VectorComponent::Unknown => write!(f, "Unknown Magnitude "),
+                VectorComponent::KnownNegative => write!(f, "Unknown Negative Magnitude "),
+                VectorComponent::KnownPositive => write!(f, "Unknown Positive Magnitude "),
+                VectorComponent::KnownExactly(mag) => write!(f, "{} ", *mag),
+            }?;
+            writeln!(f, "@ {} acting on point {}", force.direction, force.point)?;
+        }
+        Ok(())
+    }
+}
 
 fn find_unknowns(joints: &Vec<TrussJoint2D>) -> Vec<SolverID> {
     let mut unknowns: Vec<SolverID> = Vec::new();
@@ -327,6 +343,7 @@ pub(crate) enum SolvingError {
 }
 pub(crate) fn solve_truss(
     joints: &Vec<TrussJoint2D>,
+    debug_info: bool,
 ) -> Result<Vec<(SolverID, f64)>, SolvingError> {
     let unknowns = find_unknowns(joints);
     let num_unknowns = unknowns.len();
@@ -378,18 +395,23 @@ pub(crate) fn solve_truss(
 
         let inverse = match coefficient_matrix.try_inverse() {
             Some(i) => i,
-            None => {
-                // TODO: print out the failed matrices in debug mode
-                // #[cfg(debug_assertions)]
-                // println!("Debug assertion! Tried to invert matrix {:?}", coefficient_matrix);
-                continue;
-            }
+            None => continue,
         };
+        if debug_info { // TODO: format these prettier
+            println!("Invertible Matrix found!");
+            println!("Matrix:\n{:#?}", inverse);
+            println!("Constant Matrix:\n{:#?}", constant_matrix);
+        }
+
         let answer = inverse * constant_matrix;
+        if debug_info {
+            println!("Answers:\n{:#?}", answer);
+            println!();
+        }
         return Ok(unknowns
             .into_iter()
             .zip(answer.iter().copied())
             .collect::<Vec<_>>());
     }
-    panic!();
+    Err(SolvingError::NoMatrixWorked)
 }
