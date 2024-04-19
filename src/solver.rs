@@ -347,7 +347,14 @@ pub(crate) fn solve_truss(
 ) -> Result<Vec<(SolverID, f64)>, SolvingError> {
     let unknowns = find_unknowns(joints);
     let num_unknowns = unknowns.len();
-
+    if debug_info {
+        println!("Unknowns the solver is working with (in row order for the matrices):");
+        for (count, u) in unknowns.iter().enumerate() {
+            println!("Unknown {count}: {}", u);
+        }
+        println!("End Unknowns ----");
+    }
+    
     if num_unknowns > joints.len() * 2 {
         // The solution can't be fully constrained
         todo!()
@@ -376,14 +383,24 @@ pub(crate) fn solve_truss(
         potential_rows.push(x);
         potential_rows.push(y);
     }
+    
+    if debug_info {
+        println!("Potential Equations [coefficents, ... = constant]:");
+        for (count, row) in potential_rows.iter().enumerate() {
+            println!("Potential Equation {count}: {:?}", row);
+        }
+    }
 
-    for combination in potential_rows.iter().combinations(num_unknowns) {
+    for combination in potential_rows.iter().enumerate().combinations(num_unknowns) {
         let mut coefficients: Vec<f64> = Vec::new();
         let mut constants: Vec<f64> = Vec::new();
-        for row in combination {
+        let mut equations_used: Vec<usize> = Vec::new();
+        
+        for (equ_num, row) in combination {
             let mut row = row.to_owned();
             constants.push(row.pop().unwrap());
             coefficients.extend(row);
+            equations_used.push(equ_num);
         }
 
         let coefficient_matrix =
@@ -393,14 +410,17 @@ pub(crate) fn solve_truss(
         assert_eq!(coefficient_matrix.len(), num_unknowns.pow(2));
         assert_eq!(constant_matrix.len(), num_unknowns);
 
-        let inverse = match coefficient_matrix.try_inverse() {
+        // Is the .clone() call worth the better debug info? probably?
+        let inverse = match coefficient_matrix.clone().try_inverse() {
             Some(i) => i,
             None => continue,
         };
         if debug_info { // TODO: format these prettier
             println!("Invertible Matrix found!");
-            println!("Matrix:\n{:#?}", inverse);
-            println!("Constant Matrix:\n{:#?}", constant_matrix);
+            println!("Using these equations (top to bottom): {:?}", equations_used);
+            println!("Coefficient Matrix (Column-Major):\n{:#?}", coefficient_matrix);
+            println!("Inverted Matrix (Column-Major):\n{:#?}", inverse);
+            println!("Constant Matrix (Column-Major):\n{:#?}", constant_matrix);
         }
 
         let answer = inverse * constant_matrix;

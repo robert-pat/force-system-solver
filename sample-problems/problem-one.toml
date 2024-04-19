@@ -4,7 +4,7 @@
 version = 0
 name = "test case 1"
 description = "The first test case used to solve statices problems, checked by hand!"
-debug = false
+debug = true
 write-file = false
 
 # unused (for now?):
