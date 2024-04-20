@@ -7,7 +7,7 @@ use nalgebra::DMatrix;
 use std::cmp::Ordering;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
-use std::fmt::Formatter;
+use std::fmt::{Debug, Formatter};
 use std::hash::Hasher;
 use std::ops::Mul;
 
@@ -337,6 +337,17 @@ fn find_unknowns(joints: &Vec<TrussJoint2D>) -> Vec<SolverID> {
     unknowns
 }
 
+macro_rules! display_matrix {
+    ($m: expr) => {{
+        for r in $m.row_iter() {
+            print!("[ ");
+            for v in r.iter() {
+                print!("{}, ", *v);
+            }
+            println!("]");
+        }
+    }};
+}
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub(crate) enum SolvingError {
     NoMatrixWorked,
@@ -354,7 +365,7 @@ pub(crate) fn solve_truss(
         }
         println!("End Unknowns ----");
     }
-    
+
     if num_unknowns > joints.len() * 2 {
         // The solution can't be fully constrained
         todo!()
@@ -383,7 +394,7 @@ pub(crate) fn solve_truss(
         potential_rows.push(x);
         potential_rows.push(y);
     }
-    
+
     if debug_info {
         println!("Potential Equations [coefficents, ... = constant]:");
         for (count, row) in potential_rows.iter().enumerate() {
@@ -395,7 +406,7 @@ pub(crate) fn solve_truss(
         let mut coefficients: Vec<f64> = Vec::new();
         let mut constants: Vec<f64> = Vec::new();
         let mut equations_used: Vec<usize> = Vec::new();
-        
+
         for (equ_num, row) in combination {
             let mut row = row.to_owned();
             constants.push(row.pop().unwrap());
@@ -415,17 +426,43 @@ pub(crate) fn solve_truss(
             Some(i) => i,
             None => continue,
         };
-        if debug_info { // TODO: format these prettier
+        if debug_info {
             println!("Invertible Matrix found!");
-            println!("Using these equations (top to bottom): {:?}", equations_used);
-            println!("Coefficient Matrix (Column-Major):\n{:#?}", coefficient_matrix);
-            println!("Inverted Matrix (Column-Major):\n{:#?}", inverse);
-            println!("Constant Matrix (Column-Major):\n{:#?}", constant_matrix);
+            println!(
+                "Using these equations (top to bottom): {:?}",
+                equations_used
+            );
+            println!();
+
+            println!(
+                "Coefficient Matrix ({} rows by {} cols):",
+                coefficient_matrix.nrows(),
+                coefficient_matrix.ncols()
+            );
+            display_matrix!(coefficient_matrix);
+            println!();
+            
+            println!(
+                "Inverted Matrix ({} rows by {} col):",
+                inverse.nrows(),
+                inverse.ncols()
+            );
+            display_matrix!(inverse);
+            println!();
+            
+            println!(
+                "Constant Matrix ({} rows by {} cols):",
+                constant_matrix.nrows(),
+                constant_matrix.ncols()
+            );
+            display_matrix!(constant_matrix);
+            println!();
         }
 
         let answer = inverse * constant_matrix;
         if debug_info {
-            println!("Answers:\n{:#?}", answer);
+            println!("Answers:");
+            display_matrix!(answer);
             println!();
         }
         return Ok(unknowns

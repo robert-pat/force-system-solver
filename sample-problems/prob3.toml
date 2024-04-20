@@ -1,8 +1,8 @@
 # version, name = "", description = "", debug = false, write-file = false,
 version = 0
-name = "Problem 2 :)"
-description = "THIS PROBLEM IS NOT IN EQUILIBRIUM!!! DO NOT USE !!!"
-debug = false
+name = "Problem 3"
+description = "This one will actually be in equilibrium."
+debug = true
 write-file = false
 
 # defining a point: "name", "definition strategy", <x or r>, <y or theta>
@@ -10,6 +10,7 @@ points = [
     ["A", "Origin"],
     ["B", "Cartesian", 0, 2],
     ["C", "Cartesian", 2, 0],
+    ["D", "Cartesian", 2, -2],
 ]
 
 # members = [ [point name, point name], ... ]

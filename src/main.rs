@@ -74,11 +74,11 @@ fn main() {
     } else {
         for (id, value) in solutions {
             println!(
-                "Member {} [{}]: {}({})",
+                "Member {} [{}]: {} ({})",
                 name_conversion.get(&id).unwrap(),
                 id,
                 value,
-                if value > 0f64 { "C" } else { "T" }
+                if value > 0f64 { "T" } else { "C" } // This may be backwards, confusing to think
             );
         }
     }

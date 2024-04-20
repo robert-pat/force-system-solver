@@ -354,7 +354,15 @@ fn generate_internal_forces(
 
     for (id1, id2) in &members {
         let new_id = id1.concatenate(*id2);
-        let (p1, p2) = (points.get(id1).unwrap(), points.get(id2).unwrap());
+        //let (p1, p2) = (points.get(id1).unwrap(), points.get(id2).unwrap());
+        let (p1, p2) = match (points.get(id1), points.get(id2)) {
+            (Some(a), Some(b)) => (a, b),
+            (Some(_), None) => panic!("Member declared from point that does not exist: {}", id2),
+            (None, Some(_)) => panic!("Member declared from point that does not exist: {}", id1),
+            _ => unreachable!(
+                "Unexpected result in matching point search results when building member forces"
+            ),
+        };
         let (d1, d2) = (p1.direction_to(p2), p2.direction_to(p1));
         internal_forces.push(Force2D::new(
             new_id,
