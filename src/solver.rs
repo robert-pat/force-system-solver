@@ -441,7 +441,7 @@ pub(crate) fn solve_truss(
             );
             display_matrix!(coefficient_matrix);
             println!();
-            
+
             println!(
                 "Inverted Matrix ({} rows by {} col):",
                 inverse.nrows(),
@@ -449,7 +449,7 @@ pub(crate) fn solve_truss(
             );
             display_matrix!(inverse);
             println!();
-            
+
             println!(
                 "Constant Matrix ({} rows by {} cols):",
                 constant_matrix.nrows(),

@@ -238,6 +238,7 @@ pub(crate) fn parse_loads(
 pub(crate) fn generate_support_reactions(
     array: &Value,
     points: &BTreeMap<SolverID, Point2D>,
+    name_map: &mut BTreeMap<SolverID, String>,
 ) -> Vec<Force2D> {
     let raw_supports = array_me!(array);
     let mut support_reactions: Vec<Force2D> = Vec::new();
@@ -280,16 +281,24 @@ pub(crate) fn generate_support_reactions(
         };
         match support_type {
             Support::Pin => {
+                let nx = format!("Pin {}x{}", name, rand::random::<usize>());
+                let idx = SolverID::new(&nx);
+                name_map.insert(idx, nx);
+
+                let ny = format!("Pin {}y{}", name, rand::random::<usize>());
+                let idy = SolverID::new(&ny);
+                name_map.insert(idy, ny);
+
                 support_reactions.push(Force2D::new(
-                    SolverID::new("TODO: these need to be unique"), //TODO: unique names
+                    idx,
                     attached_point.clone(),
                     Direction2D::from_angle(0f64),
                     solver::VectorComponent::Unknown,
                 ));
                 support_reactions.push(Force2D::new(
-                    SolverID::new("TODO: these need to be unique"), // TODO: unique names
+                    idy,
                     attached_point.clone(),
-                    Direction2D::from_angle(180f64),
+                    Direction2D::from_angle(90f64),
                     solver::VectorComponent::Unknown,
                 ));
             }
@@ -302,8 +311,12 @@ pub(crate) fn generate_support_reactions(
                     Some(other) => panic!("Rollers should have a direction [Up, Down, Left, Right]. Roller at point \'{name}\' has {:?}", other),
                     None => panic!("Rollers must have a direction! Roller at point \'{name}\' has none!"),
                 };
+                let unique_name = format!("Roller {}-{}", name, rand::random::<usize>());
+                let id = SolverID::new(&unique_name);
+                name_map.insert(id, unique_name);
+
                 support_reactions.push(Force2D::new(
-                    SolverID::new("Need to be unique"), // TODO: unique names
+                    id,
                     attached_point.clone(),
                     match dir {
                         Direction::Up => Direction2D::from_angle(90f64),
@@ -442,6 +455,7 @@ pub(crate) fn parse_problem(file: String, debug_info: bool) -> Result<ParsedProb
             .get("supports")
             .expect("TOML file must define a \'supports\' array"),
         &points,
+        &mut names_record,
     );
 
     // TODO: include the validations for points, forces, and whatever else

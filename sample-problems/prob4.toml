@@ -1,0 +1,31 @@
+# version, name = "", description = "", debug = false, write-file = false,
+version = 0
+name = "Problem 3"
+description = "This one will actually be in equilibrium."
+debug = true
+write-file = false
+
+# defining a point: "name", "definition strategy", <x or r>, <y or theta>
+points = [
+    ["A", "Origin"],
+    ["B", "Polar", 2, 60],
+    ["C", "Cartesian", 2, 0],
+]
+
+# members = [ [point name, point name], ... ]
+members = [
+    ["A", "B"],
+    ["A", "C"],
+    ["B", "C"],
+]
+
+# loads = [ [point name, magnitude, direction, <angle>], ...]
+loads = [
+    ["B", 100, "Polar", 225],
+]
+
+# currently only accepts pin and roller
+supports = [
+    ["A", "Pin"],
+    ["C", "Roller", "Up"],
+]
