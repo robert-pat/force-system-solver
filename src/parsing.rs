@@ -82,7 +82,6 @@ macro_rules! array_me {
 // TODO: better error messages by 1) impl Error 2) including name info to find these
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum PointValidationError {
-    DuplicatePoint,
     DuplicatePosition,
 }
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -398,6 +397,7 @@ fn generate_internal_forces(
 pub enum ParsingError {
     InvalidTOMLFile,
     IncorrectPoints(PointValidationError),
+    #[allow(unused)]
     NotInEquilibrium,
 }
 impl Display for ParsingError {

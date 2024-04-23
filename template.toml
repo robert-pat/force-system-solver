@@ -1,18 +1,26 @@
-# version, name = "", description = "", debug = false, write-file = false,
-version = 0
+# name = "", description = "", debug = false, write-file = false,
+# each item must be on a seperate line w/ no ending marks, e.g., "debug = false;" is wrong
+
 name = ""
 description = ""
 debug = false
 write-file = false
 
-# defining a point: "name", "definition strategy", <x or r>, <y or theta>
+# defining a point: ["name", "definition strategy", <x or r>, <y or theta>]
+# seperate points with a comma and then a new line
+# ["Example", "Origin"]
+
 points = []
 
-# members = [ [point name, point name], ... ]
+# Define a member: ["point name", "point name"], 
+# The names must match those of points above
 members = []
 
 # loads = [ [point name, magnitude, direction, <angle>], ...]
+# or ["point name", magnitude, "Up"]
+# available directions: ["Up", "Down", "Left", "Right"] or custom with [..., "Polar", theta] 
 loads = []
 
 # currently only accepts pin and roller
+# either ["Point name", "Pin"] or ["Point name", "Roller", "Up"]
 supports = []

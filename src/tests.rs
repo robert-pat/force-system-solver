@@ -1,9 +1,14 @@
 #[cfg(test)]
+use std::collections::BTreeMap;
+
+#[cfg(test)]
 use toml::Table;
 
 #[cfg(test)]
 use crate::parsing;
+#[cfg(test)]
 use crate::parsing::PointValidationError;
+#[cfg(test)]
 use crate::solver;
 
 #[test]
@@ -36,7 +41,7 @@ fn read_points_from_file() -> Result<(), ()> {
     let data = file.parse::<Table>().unwrap();
     let points = {
         let a = data.get("points").unwrap();
-        parsing::parse_points(a)
+        parsing::parse_points(a, &mut BTreeMap::new(), false)
     };
     panic!("{:?}", points);
 }
@@ -46,10 +51,13 @@ fn check_point_reading() -> Result<(), ()> {
     let file = std::fs::read_to_string(r"sample-problems\points-test.toml").unwrap();
     let toml_data = file.parse::<Table>().unwrap();
 
-    let mut points = parsing::parse_points(toml_data.get("points").unwrap())
-        .into_iter()
-        .map(|(a, b)| b)
-        .collect::<Vec<_>>();
+    let mut points = parsing::parse_points(
+        toml_data.get("points").unwrap(),
+        &mut BTreeMap::new(),
+        false,
+    )
+    .into_values()
+    .collect::<Vec<_>>();
     points.sort_by_key(|a| a.id());
 
     let mut answers: Vec<solver::Point2D> = vec![
@@ -90,7 +98,11 @@ fn check_point_validation() -> Result<(), ()> {
     let file = std::fs::read_to_string(r"sample-problems/error_points.toml").unwrap();
     let toml_data = file.parse::<Table>().unwrap();
 
-    let mut points = parsing::parse_points(toml_data.get("points").unwrap());
+    let mut points = parsing::parse_points(
+        toml_data.get("points").unwrap(),
+        &mut BTreeMap::new(),
+        false,
+    );
 
     if parsing::validate_points(&points).is_ok() {
         eprintln!("Point validation did not error!");

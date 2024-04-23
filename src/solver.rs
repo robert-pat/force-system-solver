@@ -367,7 +367,10 @@ pub(crate) fn solve_truss(
     }
 
     if num_unknowns > joints.len() * 2 {
-        eprintln!("There are more unknowns ({num_unknowns}) that available equations ({})", joints.len() * 2);
+        eprintln!(
+            "There are more unknowns ({num_unknowns}) that available equations ({})",
+            joints.len() * 2
+        );
         panic!("Aborting solving!");
     };
 
