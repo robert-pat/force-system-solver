@@ -74,7 +74,9 @@ macro_rules! array_me {
         if let toml::Value::Array(a) = $value {
             a
         } else {
-            todo!()
+            eprintln!("Error expected a TOML array, but got {:?} instead", $value);
+            eprintln!("Make sure you've declared everything in arrays (with \'[\' and \']\').");
+            panic!("This might be a programming error!");
         }
     };
 }
@@ -84,6 +86,7 @@ macro_rules! array_me {
 pub enum PointValidationError {
     DuplicatePosition,
 }
+#[warn(incomplete_features)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum EquilibriumError {}
 
@@ -107,6 +110,8 @@ pub(crate) fn validate_points(
     }
     Ok(())
 }
+
+#[warn(incomplete_features)]
 #[allow(unused)]
 fn validate_static_equilibrium() -> Result<(), EquilibriumError> {
     todo!()
