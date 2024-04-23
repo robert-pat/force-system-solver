@@ -1,0 +1,18 @@
+# version, name = "", description = "", debug = false, write-file = false,
+version = 0
+name = ""
+description = ""
+debug = false
+write-file = false
+
+# defining a point: "name", "definition strategy", <x or r>, <y or theta>
+points = []
+
+# members = [ [point name, point name], ... ]
+members = []
+
+# loads = [ [point name, magnitude, direction, <angle>], ...]
+loads = []
+
+# currently only accepts pin and roller
+supports = []

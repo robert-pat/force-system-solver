@@ -99,10 +99,6 @@ pub(crate) fn validate_points(
     const TOLERANCE: f64 = 0.00001f64;
     let to_remove: Vec<usize> = Vec::new();
     for point in points.values() {
-        if !names.insert(point.id()) {
-            return Err(PointValidationError::DuplicatePoint);
-        }
-
         let (x, y) = point.coords();
         if positions.iter().any(|(a, b)| {
             a - TOLERANCE <= x && x <= a + TOLERANCE && b - TOLERANCE <= y && y <= b + TOLERANCE
@@ -162,7 +158,13 @@ pub(crate) fn parse_points(
             println!("Parsed point {point_name} to {point}");
         }
 
-        points.insert(id, point);
+        match points.insert(id, point) {
+            None => {} // Point was not already created (good ending)
+            Some(_) => {
+                eprintln!("Warning! Duplicate point name declared: \'\'!");
+                panic!("Comment out the extra point with \'#\' to save it for later");
+            }
+        };
         name_map.insert(id, point_name.to_string());
     }
     points

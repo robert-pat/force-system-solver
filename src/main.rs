@@ -67,7 +67,7 @@ fn main() {
                 name_conversion.get(&id).unwrap(),
                 id,
                 value,
-                if value > 0f64 { "C" } else { "T" }
+                if value > 0f64 { "T" } else { "C" } // TODO: figure out what is actually correct
             )
             .expect("Could not write solution to file! Programming Issue.");
         }

@@ -367,8 +367,8 @@ pub(crate) fn solve_truss(
     }
 
     if num_unknowns > joints.len() * 2 {
-        // The solution can't be fully constrained
-        todo!()
+        eprintln!("There are more unknowns ({num_unknowns}) that available equations ({})", joints.len() * 2);
+        panic!("Aborting solving!");
     };
 
     let mut potential_rows: Vec<Vec<f64>> = Vec::new();
