@@ -1,3 +1,4 @@
+use crate::parsing::ParsingError;
 use crate::solver::SolvingError;
 
 mod parsing;
@@ -31,7 +32,11 @@ fn main() {
 
     let problem = match parsing::parse_problem(file, info.debug_info) {
         Ok(answer) => answer,
-        Err(_) => todo!(),
+        Err(e) => match e {
+            ParsingError::InvalidTOMLFile => panic!("Invalid TOML file provided!"),
+            ParsingError::IncorrectPoints(p) => panic!("Invalid Points: {:?}", p),
+            ParsingError::NotInEquilibrium => panic!("Truss is not in equilibrium, check the problem."),
+        },
     };
     let (joints, name_conversion) = (problem.joints, problem.name_map);
     if info.debug_info {
