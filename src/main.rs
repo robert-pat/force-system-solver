@@ -1,6 +1,7 @@
 use crate::parsing::ParsingError;
 use crate::solver::SolvingError;
 
+// TODO: Go through each of thse & write out more doc comments:
 mod parsing;
 mod solver;
 mod tests;
@@ -68,10 +69,10 @@ fn main() {
         for (id, value) in solutions {
             writeln!(
                 output,
-                "Member {} [{}]: {}({})",
+                "Member {} [{}]: {} ({})",
                 name_conversion.get(&id).unwrap(),
                 id,
-                value,
+                if info.debug_info {value} else {value.abs()},
                 if value > 0f64 { "T" } else { "C" } // TODO: figure out what is actually correct
             )
             .expect("Could not write solution to file! Programming Issue.");
@@ -82,7 +83,7 @@ fn main() {
                 "Member {} [{}]: {} ({})",
                 name_conversion.get(&id).unwrap(),
                 id,
-                value,
+                if info.debug_info {value} else {value.abs()},
                 if value > 0f64 { "T" } else { "C" } // This may be backwards, confusing to think
             );
         }
