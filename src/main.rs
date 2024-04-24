@@ -80,7 +80,7 @@ fn main() {
                 name_conversion.get(&id).unwrap(),
                 id,
                 if info.debug_info { value } else { value.abs() },
-                if value > 0f64 { "T" } else { "C" } // TODO: figure out what is actually correct
+                if value > 0f64 { "T" } else { "C" }
             )
             .expect("Could not write solution to file! Programming Issue.");
         } else {
@@ -89,7 +89,7 @@ fn main() {
                 "Member {}: {} ({})",
                 name_conversion.get(&id).unwrap(),
                 if info.debug_info { value } else { value.abs() },
-                if value > 0f64 { "T" } else { "C" } // TODO: figure out what is actually correct
+                if value > 0f64 { "T" } else { "C" }
             )
             .expect("Could not write solution to file! Programming Issue.");
         }
