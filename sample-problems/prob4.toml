@@ -1,6 +1,6 @@
 # version, name = "", description = "", debug = false, write-file = false,
 version = 0
-name = "Problem 3"
+name = "Problem 4"
 description = "This one will actually be in equilibrium."
 debug = true
 write-file = false
