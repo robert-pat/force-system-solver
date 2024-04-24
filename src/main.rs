@@ -36,7 +36,9 @@ fn main() {
         Err(e) => match e {
             ParsingError::InvalidTOMLFile => panic!("Invalid TOML file provided!"),
             ParsingError::IncorrectPoints(p) => panic!("Invalid Points: {:?}", p),
-            ParsingError::NotInEquilibrium => panic!("Truss is not in equilibrium, check the problem."),
+            ParsingError::NotInEquilibrium => {
+                panic!("Truss is not in equilibrium, check the problem.")
+            }
         },
     };
     let (joints, name_conversion) = (problem.joints, problem.name_map);
@@ -56,36 +58,40 @@ fn main() {
         Ok(answer) => answer,
         Err(SolvingError::NoMatrixWorked) => panic!("No invertible matrix found for this problem!"),
     };
-
-    // TODO: I don't love how this code is, but its fine for now
+    
     use std::io::Write;
-    if info.file_write {
-        let mut output = std::fs::OpenOptions::new()
-            .append(true)
-            .write(true)
-            .create(true)
-            .open(format!("answer-{}", info.name))
-            .unwrap();
-        for (id, value) in solutions {
+    let mut output: Box<dyn Write> = match info.file_write {
+        true => {
+            let file = std::fs::OpenOptions::new()
+                .append(true)
+                .write(true)
+                .create(true)
+                .open(format!("answer-{}", info.name))
+                .unwrap();
+            Box::new(file)
+        }
+        false => Box::new(std::io::stdout()),
+    };
+    for (id, value) in solutions {
+        if info.debug_info {
             writeln!(
                 output,
                 "Member {} [{}]: {} ({})",
                 name_conversion.get(&id).unwrap(),
                 id,
-                if info.debug_info {value} else {value.abs()},
+                if info.debug_info { value } else { value.abs() },
                 if value > 0f64 { "T" } else { "C" } // TODO: figure out what is actually correct
             )
             .expect("Could not write solution to file! Programming Issue.");
-        }
-    } else {
-        for (id, value) in solutions {
-            println!(
-                "Member {} [{}]: {} ({})",
+        } else {
+            writeln!(
+                output,
+                "Member {}: {} ({})",
                 name_conversion.get(&id).unwrap(),
-                id,
-                if info.debug_info {value} else {value.abs()},
-                if value > 0f64 { "T" } else { "C" } // This may be backwards, confusing to think
-            );
+                if info.debug_info { value } else { value.abs() },
+                if value > 0f64 { "T" } else { "C" } // TODO: figure out what is actually correct
+            )
+            .expect("Could not write solution to file! Programming Issue.");
         }
     }
     println!("Solving Complete, Program Quitting!");
