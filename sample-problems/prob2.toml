@@ -5,6 +5,8 @@ description = "THIS PROBLEM IS NOT IN EQUILIBRIUM!!! DO NOT USE !!!"
 debug = false
 write-file = false
 
+# DO NOT USE!!!!! This is a broken problem to check what happens with bad inputs
+
 # defining a point: "name", "definition strategy", <x or r>, <y or theta>
 points = [
     ["A", "Origin"],
