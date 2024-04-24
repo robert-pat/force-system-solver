@@ -6,16 +6,16 @@ mod parsing;
 mod solver;
 mod tests;
 
-/// Statics problem solver
+/// Statics problem solver! Solving 2D Trusses in Static Equilibrium
 fn main() {
-    // get the file we need, skip the program name (arg 1)
+    // get the file we need, skip the program name (first arg)
     let file_path = std::env::args().nth(2).unwrap_or_else(ask_user_for_path);
     let file = match std::fs::read_to_string(&file_path) {
         Ok(f) => f,
         Err(e) => panic!("Error opening file: {:?}", e),
     };
 
-    // startup
+    // startup messages
     let info = parsing::get_problem_information(&file);
     println!("..........");
     println!("Statics Problem Solver | Solving the problem at \'{file_path}\'");
@@ -36,6 +36,7 @@ fn main() {
         Err(e) => match e {
             ParsingError::InvalidTOMLFile => panic!("Invalid TOML file provided!"),
             ParsingError::IncorrectPoints(p) => panic!("Invalid Points: {:?}", p),
+            // This case was planned, but currently will never trigger
             ParsingError::NotInEquilibrium => {
                 panic!("Truss is not in equilibrium, check the problem.")
             }
@@ -50,7 +51,7 @@ fn main() {
         println!();
 
         for joint in &joints {
-            println!("{}", joint);
+            println!("{}", joint); // lists the forces acting at the joint
         }
     }
 
@@ -60,6 +61,7 @@ fn main() {
     };
     
     use std::io::Write;
+    // This lets writing logic to only split on debug vs no debug, not output type
     let mut output: Box<dyn Write> = match info.file_write {
         true => {
             let file = std::fs::OpenOptions::new()
@@ -97,6 +99,10 @@ fn main() {
     println!("Solving Complete, Program Quitting!");
 }
 
+/// Prompts the user to type in a path to a problem.
+/// This path is relative to the executable & will trim whitespace. 
+/// 
+/// If no path is specified, a default one will be used instead.
 fn ask_user_for_path() -> String {
     println!("Please enter a file path to the problem you would like solved.");
     println!("This path should be relative to the current directory:");

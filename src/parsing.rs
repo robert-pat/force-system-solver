@@ -14,6 +14,7 @@ pub(crate) struct ProblemInformation {
     pub(crate) debug_info: bool,
     pub(crate) file_write: bool,
 }
+/// Grabs important settings information from a TOML file. This function will not error. 
 pub(crate) fn get_problem_information(problem: &str) -> ProblemInformation {
     let table = problem.parse::<Table>().unwrap();
     let name = match table.get("name") {
@@ -81,7 +82,6 @@ macro_rules! array_me {
     };
 }
 
-// TODO: better error messages by 1) impl Error 2) including name info to find these
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum PointValidationError {
     DuplicatePosition,
@@ -119,7 +119,9 @@ fn validate_static_equilibrium() -> Result<(), EquilibriumError> {
 
 /// Takes in a toml::Value::Array and parses it into an array of Point2D for the
 /// solver to use. The function signature doesn't capture this, but the Value passed in
-/// must be the Value::Array(_) variant, or the function will panic
+/// must be the Value::Array(_) variant, or the function will panic.
+/// 
+/// Also updates a map between SolverIDs and names with the names of all points it parses.
 pub(crate) fn parse_points(
     toml_array: &Value,
     name_map: &mut BTreeMap<SolverID, String>,
@@ -173,6 +175,10 @@ pub(crate) fn parse_points(
     }
     points
 }
+
+/// Parses the applied loads in a problem. The toml_array argument must be the toml::Value::Array(_)
+/// discriminant, as the name suggests. Like other functions of this type, it takes in map to store
+/// human-readable names for each force it parses.
 pub(crate) fn parse_loads(
     toml_array: &Value,
     points: &BTreeMap<SolverID, Point2D>,
@@ -241,6 +247,7 @@ pub(crate) fn parse_loads(
     forces
 }
 
+/// Does the same thing as the `parse_loads(...)` function, but with the support reactions.
 pub(crate) fn generate_support_reactions(
     array: &Value,
     points: &BTreeMap<SolverID, Point2D>,
@@ -266,6 +273,7 @@ pub(crate) fn generate_support_reactions(
                 "Supports must be attached to an existing point! Point \'{name}\' does not exist!"
             ),
         };
+        // these are just to reduce nesting flow control and matches
         enum Support {
             Roller,
             Pin,
@@ -338,6 +346,8 @@ pub(crate) fn generate_support_reactions(
     support_reactions
 }
 
+/// Creates the forces from a structural member on each of the two end points of that member. These fores
+/// have the same ID and are named from the two points that define them.
 fn generate_internal_forces(
     array: &Value,
     name_map: &mut BTreeMap<SolverID, String>,
@@ -371,6 +381,7 @@ fn generate_internal_forces(
     members.sort();
     members.dedup();
 
+    // actually create the forces:
     for (id1, id2) in &members {
         let new_id = id1.concatenate(*id2);
         //let (p1, p2) = (points.get(id1).unwrap(), points.get(id2).unwrap());
@@ -378,6 +389,8 @@ fn generate_internal_forces(
             (Some(a), Some(b)) => (a, b),
             (Some(_), None) => panic!("Member declared from point that does not exist: {}", id2),
             (None, Some(_)) => panic!("Member declared from point that does not exist: {}", id1),
+            // This case is not actually unreachable, (None, None) but idk how that would happen
+            // this far into the program
             _ => unreachable!(
                 "Unexpected result in matching point search results when building member forces"
             ),
@@ -425,7 +438,9 @@ pub struct ParsedProblem {
     pub(crate) name_map: BTreeMap<SolverID, String>,
     pub(crate) joints: Vec<TrussJoint2D>,
 }
-#[allow(unused)]
+
+/// Parse a TOML file into usable information for the solver and rest of the program to use.
+/// The file must be the full file, read into a string.
 pub(crate) fn parse_problem(file: String, debug_info: bool) -> Result<ParsedProblem, ParsingError> {
     let toml_file = match file.parse::<Table>() {
         Ok(a) => a,
@@ -475,6 +490,7 @@ pub(crate) fn parse_problem(file: String, debug_info: bool) -> Result<ParsedProb
         map
     };
 
+    // Add all of the forces we've created onto their respective joints
     for force in loads
         .into_iter()
         .chain(internal_forces)

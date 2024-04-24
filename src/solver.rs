@@ -336,7 +336,7 @@ fn find_unknowns(joints: &Vec<TrussJoint2D>) -> Vec<SolverID> {
     unknowns.dedup();
     unknowns
 }
-
+/// Prints a na::Matrix row by row to stdout.
 macro_rules! display_matrix {
     ($m: expr) => {{
         for r in $m.row_iter() {
