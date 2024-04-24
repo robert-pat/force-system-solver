@@ -444,7 +444,7 @@ pub struct ParsedProblem {
 pub(crate) fn parse_problem(file: String, debug_info: bool) -> Result<ParsedProblem, ParsingError> {
     let toml_file = match file.parse::<Table>() {
         Ok(a) => a,
-        Err(e) => return Err(ParsingError::InvalidTOMLFile),
+        Err(_) => return Err(ParsingError::InvalidTOMLFile),
     };
     let mut names_record = BTreeMap::new();
 
