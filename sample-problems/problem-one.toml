@@ -1,14 +1,12 @@
 # This document represents a 2D truss in static equilibrium
 # this is test case 1
 
-version = 0
+
 name = "test case 1"
 description = "The first test case used to solve statices problems, checked by hand!"
 debug = true
 write-file = false
 
-# unused (for now?):
-# weight = { applied = false, type = "density", magnitude = 1 } # unused, maybe remove
 
 # defining a point: "name", "definition strategy", <x or r>, <y or theta>
 points = [
