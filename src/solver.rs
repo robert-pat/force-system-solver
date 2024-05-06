@@ -117,7 +117,7 @@ impl Point2D {
     pub(crate) fn id(&self) -> SolverID {
         self.id
     }
-    pub(crate) fn coords(&self) -> (f64, f64) {
+    pub(crate) fn pos(&self) -> (f64, f64) {
         (self.x, self.y)
     }
 }
@@ -211,15 +211,36 @@ impl Force2D {
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub(crate) enum JointToEquationError {
-    ForceHasDifferentPoint,
+pub(crate) enum EquationCreationError {
     TemplateEmpty,
     NoForcesGiven,
+    ForceNotAtJoint,
     TemplateDoesNotHaveForce,
 }
 /// Represents the order of unknowns in the rows of the coefficient matrix.
-struct MatrixRowTemplate {
-    
+type MatrixRowTemplate = BTreeMap<SolverID, usize>;
+/// Represents a full truss (well just it's joints)
+type Truss2D = Vec<TrussJoint2D>;
+
+/// A matrix row made from a linear equation of the form: ax1 + bx2 + ... = constant
+#[derive(Debug, Clone)]
+pub(crate) struct EquationRow {
+    coefficients: Vec<f64>,
+    constant: f64,
+}
+impl EquationRow {
+    fn new(coefficients: Vec<f64>, constant: f64) -> Self {
+        Self {
+            constant,
+            coefficients,
+        }
+    }
+    fn unwrap(self) -> (Vec<f64>, f64) {
+        (self.coefficients, self.constant)
+    }
+    fn len(&self) -> usize {
+        self.coefficients.len()
+    }
 }
 /// Takes in a set of forces and a template for what order the row vector should be constructed in.
 /// The function then creates two row vectors representing the net force equations for the forces
@@ -230,57 +251,55 @@ struct MatrixRowTemplate {
 /// The rows only contain the coefficients
 #[warn(incomplete_features)]
 #[allow(unused)]
-pub(crate) fn get_rows_from_joint(
-    forces: &[Force2D],
-    template: &[SolverID], //TODO: should this be changed to &BTreeMap<SolverID, usize> ?
-) -> Result<(Vec<f64>, Vec<f64>), JointToEquationError> {
-    if forces.is_empty() {
-        return Err(JointToEquationError::NoForcesGiven);
+pub(crate) fn build_equations(
+    joint: &TrussJoint2D,
+    template: &MatrixRowTemplate,
+) -> Result<[EquationRow; 2], EquationCreationError> {
+    if joint.forces.is_empty() {
+        return Err(EquationCreationError::NoForcesGiven);
     }
     if template.is_empty() {
-        return Err(JointToEquationError::TemplateEmpty);
+        return Err(EquationCreationError::TemplateEmpty);
     }
-    let point = forces[0].point.clone();
-    if forces.iter().any(|f| f.point != point) {
-        return Err(JointToEquationError::ForceHasDifferentPoint);
+    if joint.forces.iter().any(|f| f.point_id() != joint.point_id) {
+        return Err(EquationCreationError::ForceNotAtJoint);
     }
-    if forces.iter().any(|f| {
-        !matches!(f.magnitude, VectorComponent::KnownExactly(_)) && !template.contains(&f.id)
-    }) {
-        return Err(JointToEquationError::TemplateDoesNotHaveForce);
+    if joint.forces.iter().any(|f| !template.contains_key(&f.id)) {
+        return Err(EquationCreationError::TemplateDoesNotHaveForce);
     }
 
-    let mut keys: BTreeMap<SolverID, usize> = {
-        let mut map = BTreeMap::new();
-        for (index, id) in template.iter().enumerate() {
-            map.insert(*id, index);
-        }
-        map
-    };
+    let mut x_coefficients = vec![0f64; template.len()];
+    let mut y_coefficients = vec![0f64; template.len()];
+    let mut x_sum = 0f64;
+    let mut y_sum = 0f64;
 
-    let (mut x_coefficients, mut y_coefficients) =
-        (vec![0f64; template.len()], vec![0f64; template.len()]);
-    let (mut x_sum, mut y_sum) = (0f64, 0f64);
-
-    for force in forces {
+    for force in joint.forces.iter() {
         if let VectorComponent::KnownExactly(val) = force.magnitude {
             x_sum += val * force.direction.x;
             y_sum += val * force.direction.y;
             continue;
         }
 
-        let key = *keys.get(&force.id).unwrap();
+        let key = *template.get(&force.id).unwrap();
         x_coefficients[key] = force.direction.x;
         y_coefficients[key] = force.direction.y;
+    }
+
+    // floating point numbers (bc 0 vs non-zero in a matrix matters lots)
+    const TOLERANCE: f64 = 0.00000001;
+    for v in x_coefficients.iter_mut().chain(y_coefficients.iter_mut()) {
+        if (-TOLERANCE..=TOLERANCE).contains(v) {
+            *v = 0f64;
+        }
     }
 
     // This is the constant part of the linear equation. In matrix form, it's the value of this row
     // of C in A*B = C. Multiply by -1 bc net force equations are of the form: (sum of things) = 0
     // not (coefficient * variable(s)) = constant
-    x_coefficients.push(-1.0 * x_sum);
-    y_coefficients.push(-1.0 * y_sum);
+    let x = EquationRow::new(x_coefficients, x_sum * -1.0);
+    let y = EquationRow::new(y_coefficients, y_sum * -1.0);
 
-    Ok((x_coefficients, y_coefficients))
+    Ok([x, y])
 }
 
 #[derive(Debug)]
@@ -347,24 +366,35 @@ macro_rules! display_matrix {
 pub(crate) enum SolvingError {
     NoMatrixWorked,
 }
-pub(crate) struct ForceResult {
+#[derive(Debug)]
+pub(crate) struct ComputedForce {
     pub(crate) force: SolverID,
     pub(crate) value: f64,
 }
-impl ForceResult {
+impl ComputedForce {
     fn new(id: SolverID, value: f64) -> Self {
-        ForceResult { force: id, value }
+        ComputedForce { force: id, value }
     }
 }
+
 pub(crate) fn solve_truss(
     joints: &Vec<TrussJoint2D>,
     debug_info: bool,
-) -> Result<Vec<ForceResult>, SolvingError> {
-    let unknowns = find_unknowns(joints);
-    let num_unknowns = unknowns.len();
+) -> Result<Vec<ComputedForce>, SolvingError> {
+    let row_template: BTreeMap<SolverID, usize> = {
+        let mut unknowns = find_unknowns(joints);
+        unknowns.sort();
+        unknowns
+            .into_iter()
+            .enumerate()
+            .map(|(a, b)| (b, a))
+            .collect::<_>()
+    };
+    let num_unknowns = row_template.len();
+
     if debug_info {
         println!("Unknowns the solver is working with (in row order for the matrices):");
-        for (count, u) in unknowns.iter().enumerate() {
+        for (u, count) in row_template.iter() {
             println!("Unknown {count}: {}", u);
         }
         println!("End Unknowns ----");
@@ -378,46 +408,37 @@ pub(crate) fn solve_truss(
         panic!("Aborting solving!");
     };
 
-    let mut potential_rows: Vec<Vec<f64>> = Vec::new();
-    for joint in joints {
-        let (mut x, mut y) = get_rows_from_joint(&joint.forces, &unknowns).unwrap();
-
-        assert_eq!(x.len(), num_unknowns + 1);
-        assert_eq!(y.len(), num_unknowns + 1);
-
-        // floating point numbers (bc 0 vs non-zero in a matrix matters lots)
-        const TOLERANCE: f64 = 0.00000001;
-        for v in x.iter_mut() {
-            if (-TOLERANCE..=TOLERANCE).contains(v) {
-                *v = 0f64;
-            }
+    let mut potential_rows: Vec<EquationRow> = Vec::new();
+    for joint in joints.iter() {
+        let equations = build_equations(joint, &row_template).unwrap();
+        for equ in equations {
+            assert_eq!(equ.len(), num_unknowns);
+            potential_rows.push(equ);
         }
-        for v in y.iter_mut() {
-            if (-TOLERANCE..=TOLERANCE).contains(v) {
-                *v = 0f64;
-            }
-        }
-
-        potential_rows.push(x);
-        potential_rows.push(y);
     }
 
     if debug_info {
-        println!("Potential Equations [coefficents, ... = constant]:");
+        println!("Potential Equations [coefficients] = constant:");
         for (count, row) in potential_rows.iter().enumerate() {
-            println!("Potential Equation {count}: {:?}", row);
+            println!(
+                "Potential Equation {count}: {:?} = {}",
+                row.coefficients, row.constant
+            );
         }
     }
 
-    for combination in potential_rows.iter().enumerate().combinations(num_unknowns) {
+    for combination in potential_rows
+        .into_iter()
+        .enumerate()
+        .combinations(num_unknowns)
+    {
         let mut coefficients: Vec<f64> = Vec::new();
         let mut constants: Vec<f64> = Vec::new();
         let mut equations_used: Vec<usize> = Vec::new();
 
         for (equ_num, row) in combination {
-            let mut row = row.to_owned();
-            constants.push(row.pop().unwrap());
-            coefficients.extend(row);
+            constants.push(row.constant);
+            coefficients.extend(row.coefficients);
             equations_used.push(equ_num);
         }
 
@@ -433,6 +454,7 @@ pub(crate) fn solve_truss(
             Some(i) => i,
             None => continue,
         };
+        
         if debug_info {
             println!("Invertible Matrix found!");
             println!(
@@ -472,11 +494,13 @@ pub(crate) fn solve_truss(
             display_matrix!(answer);
             println!();
         }
-        return Ok(unknowns
-            .into_iter()
-            .zip(answer.iter().copied())
-            .map(|(a, b)| ForceResult::new(a, b))
-            .collect::<Vec<_>>());
+
+        let mut return_me = Vec::with_capacity(row_template.len());
+        for (id, position) in row_template.into_iter() {
+            let force_result = ComputedForce::new(id, *answer.get(position).unwrap());
+            return_me.push(force_result);
+        }
+        return Ok(return_me);
     }
     Err(SolvingError::NoMatrixWorked)
 }

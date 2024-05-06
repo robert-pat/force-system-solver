@@ -1,7 +1,7 @@
 use crate::parsing::ParsingError;
 use crate::solver::SolvingError;
 
-// TODO: Go through each of thse & write out more doc comments:
+// TODO: Go through each of these & write out more doc comments:
 mod parsing;
 mod solver;
 mod tests;
@@ -74,7 +74,7 @@ fn main() {
         Box::new(std::io::stdout())
     };
     for result in solutions {
-        let f_dir = if value > 0f64 { "T" } else { "C" };
+        let f_dir = if result.value > 0f64 { "T" } else { "C" };
 
         if info.debug_info {
             writeln!(

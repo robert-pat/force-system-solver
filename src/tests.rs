@@ -80,11 +80,11 @@ fn check_point_reading() -> Result<(), ()> {
             eprintln!("Point {:?} should've been {:?}", calculated, ans);
             return Err(());
         }
-        if calculated.coords() != ans.coords() {
+        if calculated.pos() != ans.pos() {
             eprintln!(
                 "Parsed location {:?} does not match answer location {:?}. ",
-                calculated.coords(),
-                ans.coords()
+                calculated.pos(),
+                ans.pos()
             );
             eprintln!("Point {:?} should've been {:?}", calculated, ans);
             return Err(());

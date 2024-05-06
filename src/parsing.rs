@@ -101,7 +101,7 @@ pub(crate) fn validate_points(
     const TOLERANCE: f64 = 0.00001f64;
     let to_remove: Vec<usize> = Vec::new();
     for point in points.values() {
-        let (x, y) = point.coords();
+        let (x, y) = point.pos();
         if positions.iter().any(|(a, b)| {
             a - TOLERANCE <= x && x <= a + TOLERANCE && b - TOLERANCE <= y && y <= b + TOLERANCE
         }) {
