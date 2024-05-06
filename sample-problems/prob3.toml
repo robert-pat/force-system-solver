@@ -1,8 +1,7 @@
-# version, name = "", description = "", debug = false, write-file = false,
-version = 0
+# name = "", description = "", debug = false, write-file = false,
 name = "Problem 3"
 description = "This one will actually be in equilibrium."
-debug = true
+debug = false
 write-file = false
 
 # defining a point: "name", "definition strategy", <x or r>, <y or theta>

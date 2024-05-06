@@ -217,6 +217,10 @@ pub(crate) enum JointToEquationError {
     NoForcesGiven,
     TemplateDoesNotHaveForce,
 }
+/// Represents the order of unknowns in the rows of the coefficient matrix.
+struct MatrixRowTemplate {
+    
+}
 /// Takes in a set of forces and a template for what order the row vector should be constructed in.
 /// The function then creates two row vectors representing the net force equations for the forces
 /// in the x and y directions. The last item in each vector is the result of the equation (C) in
@@ -285,15 +289,6 @@ pub(crate) struct TrussJoint2D {
     pub(crate) forces: Vec<Force2D>,
 }
 impl TrussJoint2D {
-    pub(crate) fn new(p: Point2D, forces: Vec<Force2D>) -> Option<Self> {
-        if forces.iter().any(|f| f.point != p) {
-            return None;
-        }
-        Some(Self {
-            point_id: p.id,
-            forces,
-        })
-    }
     pub fn add(&mut self, force: Force2D) {
         self.forces.push(force)
     }
@@ -352,10 +347,19 @@ macro_rules! display_matrix {
 pub(crate) enum SolvingError {
     NoMatrixWorked,
 }
+pub(crate) struct ForceResult {
+    pub(crate) force: SolverID,
+    pub(crate) value: f64,
+}
+impl ForceResult {
+    fn new(id: SolverID, value: f64) -> Self {
+        ForceResult { force: id, value }
+    }
+}
 pub(crate) fn solve_truss(
     joints: &Vec<TrussJoint2D>,
     debug_info: bool,
-) -> Result<Vec<(SolverID, f64)>, SolvingError> {
+) -> Result<Vec<ForceResult>, SolvingError> {
     let unknowns = find_unknowns(joints);
     let num_unknowns = unknowns.len();
     if debug_info {
@@ -471,6 +475,7 @@ pub(crate) fn solve_truss(
         return Ok(unknowns
             .into_iter()
             .zip(answer.iter().copied())
+            .map(|(a, b)| ForceResult::new(a, b))
             .collect::<Vec<_>>());
     }
     Err(SolvingError::NoMatrixWorked)

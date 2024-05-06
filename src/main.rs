@@ -59,49 +59,49 @@ fn main() {
         Ok(answer) => answer,
         Err(SolvingError::NoMatrixWorked) => panic!("No invertible matrix found for this problem!"),
     };
-    
+
     use std::io::Write;
     // This lets writing logic to only split on debug vs no debug, not output type
-    let mut output: Box<dyn Write> = match info.file_write {
-        true => {
-            let file = std::fs::OpenOptions::new()
-                .append(true)
-                .write(true)
-                .create(true)
-                .open(format!("answer-{}", info.name))
-                .unwrap();
-            Box::new(file)
-        }
-        false => Box::new(std::io::stdout()),
+    let mut output: Box<dyn Write> = if info.file_write {
+        let file = std::fs::OpenOptions::new()
+            .append(true)
+            .write(true)
+            .create(true)
+            .open(format!("answer-{}", info.name))
+            .unwrap();
+        Box::new(file)
+    } else {
+        Box::new(std::io::stdout())
     };
-    for (id, value) in solutions {
+    for result in solutions {
+        let f_dir = if value > 0f64 { "T" } else { "C" };
+
         if info.debug_info {
             writeln!(
                 output,
                 "Member {} [{}]: {} ({})",
-                name_conversion.get(&id).unwrap(),
-                id,
-                if info.debug_info { value } else { value.abs() },
-                if value > 0f64 { "T" } else { "C" }
+                name_conversion.get(&result.force).unwrap(),
+                result.force,
+                result.value,
+                f_dir
             )
-            .expect("Could not write solution to file! Programming Issue.");
         } else {
             writeln!(
                 output,
                 "Member {}: {} ({})",
-                name_conversion.get(&id).unwrap(),
-                if info.debug_info { value } else { value.abs() },
-                if value > 0f64 { "T" } else { "C" }
+                name_conversion.get(&result.force).unwrap(),
+                result.value.abs(),
+                f_dir
             )
-            .expect("Could not write solution to file! Programming Issue.");
         }
+        .expect("Couldn't write to output!");
     }
     println!("Solving Complete, Program Quitting!");
 }
 
 /// Prompts the user to type in a path to a problem.
-/// This path is relative to the executable & will trim whitespace. 
-/// 
+/// This path is relative to the executable & will trim whitespace.
+///
 /// If no path is specified, a default one will be used instead.
 fn ask_user_for_path() -> String {
     println!("Please enter a file path to the problem you would like solved.");

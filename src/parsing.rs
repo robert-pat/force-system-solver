@@ -14,7 +14,7 @@ pub(crate) struct ProblemInformation {
     pub(crate) debug_info: bool,
     pub(crate) file_write: bool,
 }
-/// Grabs important settings information from a TOML file. This function will not error. 
+/// Grabs important settings information from a TOML file. This function will not error.
 pub(crate) fn get_problem_information(problem: &str) -> ProblemInformation {
     let table = problem.parse::<Table>().unwrap();
     let name = match table.get("name") {
@@ -120,7 +120,7 @@ fn validate_static_equilibrium() -> Result<(), EquilibriumError> {
 /// Takes in a toml::Value::Array and parses it into an array of Point2D for the
 /// solver to use. The function signature doesn't capture this, but the Value passed in
 /// must be the Value::Array(_) variant, or the function will panic.
-/// 
+///
 /// Also updates a map between SolverIDs and names with the names of all points it parses.
 pub(crate) fn parse_points(
     toml_array: &Value,
