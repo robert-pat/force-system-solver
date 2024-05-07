@@ -6,6 +6,7 @@ use toml::Table;
 
 #[cfg(test)]
 use crate::parsing;
+use crate::parsing::DebugInfo;
 #[cfg(test)]
 use crate::parsing::PointValidationError;
 #[cfg(test)]
@@ -41,7 +42,7 @@ fn read_points_from_file() -> Result<(), ()> {
     let data = file.parse::<Table>().unwrap();
     let points = {
         let a = data.get("points").unwrap();
-        parsing::parse_points(a, &mut BTreeMap::new(), false)
+        parsing::parse_points(a, &mut BTreeMap::new(), &mut DebugInfo::empty())
     };
     panic!("{:?}", points);
 }
@@ -54,7 +55,7 @@ fn check_point_reading() -> Result<(), ()> {
     let mut points = parsing::parse_points(
         toml_data.get("points").unwrap(),
         &mut BTreeMap::new(),
-        false,
+        &mut DebugInfo::empty(),
     )
     .into_values()
     .collect::<Vec<_>>();
@@ -101,7 +102,7 @@ fn check_point_validation() -> Result<(), ()> {
     let mut points = parsing::parse_points(
         toml_data.get("points").unwrap(),
         &mut BTreeMap::new(),
-        false,
+        &mut DebugInfo::empty(),
     );
 
     if parsing::validate_points(&points).is_ok() {

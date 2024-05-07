@@ -60,6 +60,23 @@ pub(crate) struct DebugInfo {
     pub(crate) enabled: bool,
     pub(crate) output: Box<dyn Write>,
 }
+impl DebugInfo {
+    pub(crate) fn empty() -> Self {
+        DebugInfo{
+            enabled: false,
+            output: Box::new(EmptyWriter())
+        }
+    }
+}
+struct EmptyWriter();
+impl Write for EmptyWriter {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        Ok(0)
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
 /// Turn an iterator over toml Values into a pair of numbers. This will warn if there are more than 2
 /// values in the iterator and panic if there are less than 2 (or if one/both isn't a number). This
 /// function works with both toml::Value::Float and toml::Value::Integer
