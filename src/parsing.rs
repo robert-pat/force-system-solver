@@ -61,6 +61,7 @@ pub(crate) struct DebugInfo {
     pub(crate) output: Box<dyn Write>,
 }
 impl DebugInfo {
+    #[allow(unused)] // Used in tests
     pub(crate) fn empty() -> Self {
         DebugInfo{
             enabled: false,
@@ -70,6 +71,7 @@ impl DebugInfo {
 }
 struct EmptyWriter();
 impl Write for EmptyWriter {
+    #[allow(unused)]
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         Ok(0)
     }

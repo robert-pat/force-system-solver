@@ -6,6 +6,7 @@ use toml::Table;
 
 #[cfg(test)]
 use crate::parsing;
+#[cfg(test)]
 use crate::parsing::DebugInfo;
 #[cfg(test)]
 use crate::parsing::PointValidationError;
