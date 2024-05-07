@@ -2,6 +2,7 @@
 
 use nalgebra as na;
 
+use crate::parsing::DebugInfo;
 use itertools::Itertools;
 use nalgebra::DMatrix;
 use std::cmp::Ordering;
@@ -264,7 +265,12 @@ pub(crate) fn build_equations(
     if joint.forces.iter().any(|f| f.point_id() != joint.point_id) {
         return Err(EquationCreationError::ForceNotAtJoint);
     }
-    if joint.forces.iter().any(|f| !template.contains_key(&f.id)) {
+    if joint
+        .forces
+        .iter()
+        .filter(|f| !matches!(VectorComponent::KnownExactly, f))
+        .any(|f| !template.contains_key(&f.id))
+    {
         return Err(EquationCreationError::TemplateDoesNotHaveForce);
     }
 
@@ -352,14 +358,15 @@ fn find_unknowns(joints: &Vec<TrussJoint2D>) -> Vec<SolverID> {
 }
 /// Prints a na::Matrix row by row to stdout.
 macro_rules! display_matrix {
-    ($m: expr) => {{
+    ($m: expr, $out: expr) => {{
         for r in $m.row_iter() {
-            print!("[ ");
+            write!($out, "[ ");
             for v in r.iter() {
-                print!("{}, ", *v);
+                write!($out, "{}, ", *v);
             }
-            println!("]");
+            writeln!($out, "]");
         }
+        writeln!($out);
     }};
 }
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -379,7 +386,7 @@ impl ComputedForce {
 
 pub(crate) fn solve_truss(
     joints: &Vec<TrussJoint2D>,
-    debug_info: bool,
+    debug: &mut DebugInfo,
 ) -> Result<Vec<ComputedForce>, SolvingError> {
     let row_template: BTreeMap<SolverID, usize> = {
         let mut unknowns = find_unknowns(joints);
@@ -392,12 +399,15 @@ pub(crate) fn solve_truss(
     };
     let num_unknowns = row_template.len();
 
-    if debug_info {
-        println!("Unknowns the solver is working with (in row order for the matrices):");
+    if debug.enabled {
+        writeln!(
+            debug.output,
+            "Unknowns the solver is working with (in row order for the matrices):"
+        );
         for (u, count) in row_template.iter() {
-            println!("Unknown {count}: {}", u);
+            writeln!(debug.output, "Unknown {count}: {}", u);
         }
-        println!("End Unknowns ----");
+        writeln!(debug.output, "End Unknowns ----");
     }
 
     if num_unknowns > joints.len() * 2 {
@@ -417,10 +427,14 @@ pub(crate) fn solve_truss(
         }
     }
 
-    if debug_info {
-        println!("Potential Equations [coefficients] = constant:");
+    if debug.enabled {
+        writeln!(
+            debug.output,
+            "Potential Equations [coefficients] = constant:"
+        );
         for (count, row) in potential_rows.iter().enumerate() {
-            println!(
+            writeln!(
+                debug.output,
                 "Potential Equation {count}: {:?} = {}",
                 row.coefficients, row.constant
             );
@@ -454,45 +468,44 @@ pub(crate) fn solve_truss(
             Some(i) => i,
             None => continue,
         };
-        
-        if debug_info {
-            println!("Invertible Matrix found!");
-            println!(
-                "Using these equations (top to bottom): {:?}",
-                equations_used
-            );
-            println!();
 
-            println!(
+        if debug.enabled {
+            writeln!(
+                debug.output,
+                "Invertible matrix found!\nUsing these equations (top to bottom): {:?}\n",
+                equations_used
+            )
+            .unwrap();
+
+            writeln!(
+                debug.output,
                 "Coefficient Matrix ({} rows by {} cols):",
                 coefficient_matrix.nrows(),
                 coefficient_matrix.ncols()
             );
-            display_matrix!(coefficient_matrix);
-            println!();
+            display_matrix!(coefficient_matrix, debug.output);
 
-            println!(
+            writeln!(
+                debug.output,
                 "Inverted Matrix ({} rows by {} col):",
                 inverse.nrows(),
                 inverse.ncols()
             );
-            display_matrix!(inverse);
-            println!();
+            display_matrix!(inverse, debug.output);
 
-            println!(
+            writeln!(
+                debug.output,
                 "Constant Matrix ({} rows by {} cols):",
                 constant_matrix.nrows(),
                 constant_matrix.ncols()
             );
-            display_matrix!(constant_matrix);
-            println!();
+            display_matrix!(constant_matrix, debug.output);
         }
 
         let answer = inverse * constant_matrix;
-        if debug_info {
-            println!("Answers:");
-            display_matrix!(answer);
-            println!();
+        if debug.enabled {
+            writeln!(debug.output, "Answers:");
+            display_matrix!(answer, debug.output);
         }
 
         let mut return_me = Vec::with_capacity(row_template.len());

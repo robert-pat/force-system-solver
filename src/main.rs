@@ -1,7 +1,6 @@
 use crate::parsing::ParsingError;
 use crate::solver::SolvingError;
 
-// TODO: Go through each of these & write out more doc comments:
 mod parsing;
 mod solver;
 mod tests;
@@ -16,22 +15,23 @@ fn main() {
     };
 
     // startup messages
-    let info = parsing::get_problem_information(&file);
+    let mut info = parsing::get_problem_information(&file);
     println!("..........");
     println!("Statics Problem Solver | Solving the problem at \'{file_path}\'");
     println!("Working on problem: {}!", info.name);
-    if info.debug_info {
+    if info.debug.enabled {
         eprintln!("------------");
         eprintln!("Debug info enabled! The parser & solver will spit out a lot of text!");
-        eprintln!("------------");
         if info.file_write {
-            eprintln!("Warning: Debug printing to a file is not yet supported, sorry!");
-            eprintln!("Use \'[command] >> name.txt\' to pipe the output to name.txt (windows).");
-            eprintln!();
+            eprintln!(
+                "Debug printing to a file is enabled! Results & debug information will be printed to \'answer-{}\'", 
+                info.name
+            );
         }
+        eprintln!("------------");
     }
 
-    let problem = match parsing::parse_problem(file, info.debug_info) {
+    let problem = match parsing::parse_problem(file, &mut info.debug) {
         Ok(answer) => answer,
         Err(e) => match e {
             ParsingError::InvalidTOMLFile => panic!("Invalid TOML file provided!"),
@@ -43,42 +43,30 @@ fn main() {
         },
     };
     let (joints, name_conversion) = (problem.joints, problem.name_map);
-    if info.debug_info {
-        println!("Name Conversion:");
+    if info.debug.enabled {
+        writeln!(info.debug.output, "Name Conversion:").unwrap();
         for (id, name) in name_conversion.iter() {
-            println!("Id {} is \'{}\'", id, name);
+            writeln!(info.debug.output, "Id {} is \'{}\'", id, name).unwrap();
         }
-        println!();
 
+        writeln!(info.debug.output, "Joints:").unwrap();
         for joint in &joints {
-            println!("{}", joint); // lists the forces acting at the joint
+            writeln!(info.debug.output, "{}", joint).unwrap(); // lists the forces acting at the joint
         }
     }
 
-    let solutions = match solver::solve_truss(&joints, info.debug_info) {
+    let solutions = match solver::solve_truss(&joints, &mut info.debug) {
         Ok(answer) => answer,
         Err(SolvingError::NoMatrixWorked) => panic!("No invertible matrix found for this problem!"),
     };
 
     use std::io::Write;
-    // This lets writing logic to only split on debug vs no debug, not output type
-    let mut output: Box<dyn Write> = if info.file_write {
-        let file = std::fs::OpenOptions::new()
-            .append(true)
-            .write(true)
-            .create(true)
-            .open(format!("answer-{}", info.name))
-            .unwrap();
-        Box::new(file)
-    } else {
-        Box::new(std::io::stdout())
-    };
     for result in solutions {
         let f_dir = if result.value > 0f64 { "T" } else { "C" };
 
-        if info.debug_info {
+        if info.debug.enabled {
             writeln!(
-                output,
+                info.debug.output,
                 "Member {} [{}]: {} ({})",
                 name_conversion.get(&result.force).unwrap(),
                 result.force,
@@ -87,7 +75,7 @@ fn main() {
             )
         } else {
             writeln!(
-                output,
+                info.debug.output,
                 "Member {}: {} ({})",
                 name_conversion.get(&result.force).unwrap(),
                 result.value.abs(),

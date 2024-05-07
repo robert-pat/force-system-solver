@@ -2,6 +2,7 @@ use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
+use std::io::Write;
 use std::{collections::BTreeMap, slice::Iter};
 
 use toml::{Table, Value};
@@ -11,7 +12,7 @@ use crate::solver::{Direction2D, Force2D, Point2D, SolverID, TrussJoint2D};
 
 pub(crate) struct ProblemInformation {
     pub(crate) name: String,
-    pub(crate) debug_info: bool,
+    pub(crate) debug: DebugInfo,
     pub(crate) file_write: bool,
 }
 /// Grabs important settings information from a TOML file. This function will not error.
@@ -22,7 +23,7 @@ pub(crate) fn get_problem_information(problem: &str) -> ProblemInformation {
         Some(_) => String::from("(Invalid name--not text)"),
         None => String::from("No name"),
     };
-    let debug_info = match table.get("debug") {
+    let debug_enabled = match table.get("debug") {
         Some(Value::Boolean(b)) => *b,
         _ => false,
     };
@@ -31,13 +32,34 @@ pub(crate) fn get_problem_information(problem: &str) -> ProblemInformation {
         _ => false,
     };
 
+    let output: Box<dyn Write> = if file_write {
+        let file = std::fs::OpenOptions::new()
+            .append(true)
+            .write(true)
+            .create(true)
+            .open(format!("answer-{}", name))
+            .unwrap();
+        Box::new(file)
+    } else {
+        Box::new(std::io::stdout())
+    };
+
     ProblemInformation {
         name,
-        debug_info,
+        debug: DebugInfo {
+            enabled: debug_enabled,
+            output,
+        },
         file_write,
     }
 }
 
+#[allow(unused)]
+#[warn(incomplete_features)]
+pub(crate) struct DebugInfo {
+    pub(crate) enabled: bool,
+    pub(crate) output: Box<dyn Write>,
+}
 /// Turn an iterator over toml Values into a pair of numbers. This will warn if there are more than 2
 /// values in the iterator and panic if there are less than 2 (or if one/both isn't a number). This
 /// function works with both toml::Value::Float and toml::Value::Integer
@@ -125,7 +147,7 @@ fn validate_static_equilibrium() -> Result<(), EquilibriumError> {
 pub(crate) fn parse_points(
     toml_array: &Value,
     name_map: &mut BTreeMap<SolverID, String>,
-    print_debug: bool,
+    debug: &mut DebugInfo,
 ) -> BTreeMap<SolverID, Point2D> {
     let raw_table = array_me!(toml_array);
     let mut points: BTreeMap<SolverID, Point2D> = BTreeMap::new();
@@ -160,8 +182,8 @@ pub(crate) fn parse_points(
             None => panic!("Point missing definition type: point \'{point_name}\' has no location"),
         };
 
-        if print_debug {
-            println!("Parsed point {point_name} to {point}");
+        if debug.enabled {
+            writeln!(debug.output, "Parsed point {point_name} to {point}").unwrap();
         }
 
         match points.insert(id, point) {
@@ -441,7 +463,10 @@ pub struct ParsedProblem {
 
 /// Parse a TOML file into usable information for the solver and rest of the program to use.
 /// The file must be the full file, read into a string.
-pub(crate) fn parse_problem(file: String, debug_info: bool) -> Result<ParsedProblem, ParsingError> {
+pub(crate) fn parse_problem(
+    file: String,
+    debug: &mut DebugInfo,
+) -> Result<ParsedProblem, ParsingError> {
     let toml_file = match file.parse::<Table>() {
         Ok(a) => a,
         Err(_) => return Err(ParsingError::InvalidTOMLFile),
@@ -453,7 +478,7 @@ pub(crate) fn parse_problem(file: String, debug_info: bool) -> Result<ParsedProb
             .get("points")
             .expect("TOML file must define a points array!"),
         &mut names_record,
-        debug_info,
+        debug,
     );
 
     let internal_forces = generate_internal_forces(
