@@ -84,7 +84,7 @@ fn main() {
         }
         .expect("Couldn't write to output!");
     }
-    println!("Solving Complete, Program Quitting!");
+    writeln!(info.debug.output, "Solving Complete, Program Quitting!").unwrap();
 }
 
 /// Prompts the user to type in a path to a problem.
