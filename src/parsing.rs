@@ -63,9 +63,9 @@ pub(crate) struct DebugInfo {
 impl DebugInfo {
     #[allow(unused)] // Used in tests
     pub(crate) fn empty() -> Self {
-        DebugInfo{
+        DebugInfo {
             enabled: false,
-            output: Box::new(EmptyWriter())
+            output: Box::new(EmptyWriter()),
         }
     }
 }

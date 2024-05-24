@@ -43,7 +43,6 @@ impl SolverID {
 
     /// Concatenates the two IDs together, producing a new ID.
     /// The new ID will be the same for the same given inout IDs
-    /// TODO: Hash collision potential??
     pub(crate) fn concatenate(self, other: SolverID) -> Self {
         match self.0.cmp(&other.0) {
             Ordering::Equal => self,
@@ -356,7 +355,7 @@ fn find_unknowns(joints: &Vec<TrussJoint2D>) -> Vec<SolverID> {
     unknowns.dedup();
     unknowns
 }
-/// Prints a na::Matrix row by row to stdout.
+/// Prints a na::Matrix row by row to the given output.
 macro_rules! display_matrix {
     ($m: expr, $out: expr) => {{
         for r in $m.row_iter() {
@@ -384,10 +383,8 @@ impl ComputedForce {
     }
 }
 
-pub(crate) fn solve_truss(
-    joints: &Vec<TrussJoint2D>,
-    debug: &mut DebugInfo,
-) -> Result<Vec<ComputedForce>, SolvingError> {
+type SolvingResult = Result<Vec<ComputedForce>, SolvingError>;
+pub(crate) fn solve_truss(joints: &Vec<TrussJoint2D>, debug: &mut DebugInfo) -> SolvingResult {
     let row_template: BTreeMap<SolverID, usize> = {
         let mut unknowns = find_unknowns(joints);
         unknowns.sort();
@@ -422,6 +419,7 @@ pub(crate) fn solve_truss(
     for joint in joints.iter() {
         let equations = build_equations(joint, &row_template).unwrap();
         for equ in equations {
+            // can't move out of an array
             assert_eq!(equ.len(), num_unknowns);
             potential_rows.push(equ);
         }
