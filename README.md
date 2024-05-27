@@ -12,7 +12,7 @@ joint. These equations are then packed into a matrix and solved.
 ## Creating a TOML file to solve a program
 See ```template.toml``` for how to create a valid TOML file. I've tried to add useful error messages where possible, so
 it's not too difficult to fix issues should they pop up. You can also look at one of the problems in ```sample-problems```.
-The program does not support units, so make sure that everything (e.g. applied loads) are consistant. Also be sure
+The program does not support units, so make sure that everything (e.g. applied loads) are consistent. Also be sure
 to check for typos from copy-pasting, if your truss has many points or external loads. 
 
 #### Updates
@@ -21,7 +21,7 @@ for what I'm wanting to add / improve.
 
 #### Building & Running
 Exactly what you'd expect for a rust project. Assuming you have rustup (see https://www.rust-lang.org/tools/install),
-run ```cargo run```. File paths for inputs are relative. Absolute paths are handeled by whatever ```std::fs::read_to_string()```
+run ```cargo run```. File paths for inputs are relative. Absolute paths are handled by whatever ```std::fs::read_to_string()```
 does with them. 
 
 #### License
