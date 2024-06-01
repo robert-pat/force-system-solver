@@ -70,7 +70,7 @@ impl DebugInfo {
     /// Display the given matrix, limited to whatever the solver::solve_truss() generates.
     /// 
     /// Will print the name and then each row of the matrix in order. The size of the matrix (rows
-    /// and columns is also logged for ease of reading.
+    /// and columns) is also logged for ease of reading.
     #[allow(unused)] // rn idgaf if writing to stdout fails
     pub(crate) fn display_matrix(&mut self, m: &na::OMatrix<f64, na::Dyn, na::Dyn>, name: &str) {
         writeln!(
@@ -145,7 +145,7 @@ macro_rules! array_me {
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum PointValidationError {
-    DuplicatePosition,
+    DuplicatePosition, // TODO: add the duplicate points' IDs
 }
 #[warn(incomplete_features)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -450,7 +450,7 @@ fn generate_internal_forces(
             (Some(a), Some(b)) => (a, b),
             (Some(_), None) => panic!("Member declared from point that does not exist: {}", id2),
             (None, Some(_)) => panic!("Member declared from point that does not exist: {}", id1),
-            // This case is not actually unreachable, (None, None) but idk how that would happen
+            // This case is not actually unreachable, (None, None) but IDK how that would happen
             // this far into the program
             _ => unreachable!(
                 "Unexpected result in matching point search results when building member forces"

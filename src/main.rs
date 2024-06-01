@@ -63,12 +63,13 @@ fn main() {
     use std::io::Write;
     for result in solutions {
         let f_dir = if result.value > 0f64 { "T" } else { "C" };
+        let name = name_conversion.get(&result.force).unwrap();
 
         if info.debug.enabled {
             writeln!(
                 info.debug.output,
                 "Member {} [{}]: {} ({})",
-                name_conversion.get(&result.force).unwrap(),
+                name,
                 result.force,
                 result.value,
                 f_dir
@@ -76,8 +77,8 @@ fn main() {
         } else {
             writeln!(
                 info.debug.output,
-                "Member {}: {} ({})",
-                name_conversion.get(&result.force).unwrap(),
+                "Member {}: {:.8} ({})",
+                name,
                 result.value.abs(),
                 f_dir
             )
