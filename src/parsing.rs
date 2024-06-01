@@ -1,3 +1,4 @@
+use nalgebra as na;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::error::Error;
@@ -54,18 +55,37 @@ pub(crate) fn get_problem_information(problem: &str) -> ProblemInformation {
     }
 }
 
-#[allow(unused)]
-#[warn(incomplete_features)]
 pub(crate) struct DebugInfo {
     pub(crate) enabled: bool,
     pub(crate) output: Box<dyn Write>,
 }
 impl DebugInfo {
-    #[allow(unused)] // Used in tests
+    #[cfg(test)] // Used in tests & otherwise should always have a valid output
     pub(crate) fn empty() -> Self {
         DebugInfo {
             enabled: false,
             output: Box::new(EmptyWriter()),
+        }
+    }
+    /// Display the given matrix, limited to whatever the solver::solve_truss() generates.
+    /// 
+    /// Will print the name and then each row of the matrix in order. The size of the matrix (rows
+    /// and columns is also logged for ease of reading.
+    #[allow(unused)] // rn idgaf if writing to stdout fails
+    pub(crate) fn display_matrix(&mut self, m: &na::OMatrix<f64, na::Dyn, na::Dyn>, name: &str) {
+        writeln!(
+            self.output,
+            "{} [{} rows by {} columns]:",
+            name,
+            m.nrows(),
+            m.ncols()
+        );
+        for row in m.row_iter() {
+            write!(self.output, "[ ");
+            for v in row.iter() {
+                write!(self.output, "{}, ", *v);
+            }
+            writeln!(self.output, "]");
         }
     }
 }

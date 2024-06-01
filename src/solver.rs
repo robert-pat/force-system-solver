@@ -308,8 +308,14 @@ pub(crate) fn build_equations(
     // This is the constant part of the linear equation. In matrix form, it's the value of this row
     // of C in A*B = C. Multiply by -1 bc net force equations are of the form: (sum of things) = 0
     // not (coefficient * variable(s)) = constant
-    let x = EquationRow { coefficients: x_coefficients, constant: x_sum * -1.0 };
-    let y = EquationRow { coefficients: y_coefficients, constant: y_sum * -1.0 };
+    let x = EquationRow {
+        coefficients: x_coefficients,
+        constant: x_sum * -1.0,
+    };
+    let y = EquationRow {
+        coefficients: y_coefficients,
+        constant: y_sum * -1.0,
+    };
 
     Ok([x, y])
 }
@@ -362,19 +368,7 @@ fn find_unknowns(joints: &Vec<TrussJoint2D>) -> Vec<SolverID> {
     unknowns.dedup();
     unknowns
 }
-/// Prints a na::Matrix row by row to the given output.
-macro_rules! display_matrix {
-    ($m: expr, $out: expr) => {{
-        for r in $m.row_iter() {
-            write!($out, "[ ");
-            for v in r.iter() {
-                write!($out, "{}, ", *v);
-            }
-            writeln!($out, "]");
-        }
-        writeln!($out);
-    }};
-}
+
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub(crate) enum SolvingError {
     NoMatrixWorked,
@@ -392,15 +386,11 @@ impl ComputedForce {
 
 type SolvingResult = Result<Vec<ComputedForce>, SolvingError>;
 pub(crate) fn solve_truss(joints: &Vec<TrussJoint2D>, debug: &mut DebugInfo) -> SolvingResult {
-    let row_template: BTreeMap<SolverID, usize> = {
-        let mut unknowns = find_unknowns(joints);
-        unknowns.sort();
-        unknowns
-            .into_iter()
-            .enumerate()
-            .map(|(a, b)| (b, a))
-            .collect::<_>()
-    };
+    let row_template: BTreeMap<SolverID, usize> = find_unknowns(joints)
+        .into_iter()
+        .enumerate()
+        .map(|(a, b)| (b, a))
+        .collect();
     let num_unknowns = row_template.len();
 
     if debug.enabled {
@@ -409,24 +399,24 @@ pub(crate) fn solve_truss(joints: &Vec<TrussJoint2D>, debug: &mut DebugInfo) -> 
             "Unknowns the solver is working with (in row order for the matrices):"
         );
         for (u, count) in row_template.iter() {
-            writeln!(debug.output, "Unknown {count}: {}", u);
+            writeln!(debug.output, "Unknown {count}: {u}");
         }
         writeln!(debug.output, "End Unknowns ----");
     }
 
     if num_unknowns > joints.len() * 2 {
-        eprintln!(
-            "There are more unknowns ({num_unknowns}) that available equations ({})",
+        panic!(
+            "More unknowns ({}) that available equations ({}), aborting!",
+            num_unknowns,
             joints.len() * 2
         );
-        panic!("Aborting solving!");
     };
 
     let mut potential_rows: Vec<EquationRow> = Vec::new();
     for joint in joints.iter() {
         let equations = build_equations(joint, &row_template).unwrap();
-        // can't move out of an array
         for equ in equations {
+            // can't move out of an array
             assert_eq!(equ.len(), num_unknowns);
             potential_rows.push(equ);
         }
@@ -451,7 +441,7 @@ pub(crate) fn solve_truss(joints: &Vec<TrussJoint2D>, debug: &mut DebugInfo) -> 
         .enumerate()
         .combinations(num_unknowns)
     {
-        let mut coefficients: Vec<f64> = Vec::new();
+        let mut coefficients: Vec<f64> = Vec::new(); // could always move these out of loop
         let mut constants: Vec<f64> = Vec::new();
         let mut equations_used: Vec<usize> = Vec::new();
 
@@ -468,49 +458,24 @@ pub(crate) fn solve_truss(joints: &Vec<TrussJoint2D>, debug: &mut DebugInfo) -> 
         assert_eq!(coefficient_matrix.len(), num_unknowns.pow(2));
         assert_eq!(constant_matrix.len(), num_unknowns);
 
-        // Is the .clone() call worth the better debug info? probably?
+        // .clone() should be worth the debug info like 99.9% of the time
         let inverse = match coefficient_matrix.clone().try_inverse() {
             Some(i) => i,
             None => continue,
         };
 
         if debug.enabled {
-            writeln!(
-                debug.output,
-                "Invertible matrix found!\nUsing these equations (top to bottom): {:?}\n",
-                equations_used
-            )
-            .unwrap();
+            writeln!(debug.output, "Invertible matrix found!");
+            writeln!(debug.output, "With these equations: {:?}", equations_used);
 
-            writeln!(
-                debug.output,
-                "Coefficient Matrix ({} rows by {} cols):",
-                coefficient_matrix.nrows(),
-                coefficient_matrix.ncols()
-            );
-            display_matrix!(coefficient_matrix, debug.output);
-
-            writeln!(
-                debug.output,
-                "Inverted Matrix ({} rows by {} col):",
-                inverse.nrows(),
-                inverse.ncols()
-            );
-            display_matrix!(inverse, debug.output);
-
-            writeln!(
-                debug.output,
-                "Constant Matrix ({} rows by {} cols):",
-                constant_matrix.nrows(),
-                constant_matrix.ncols()
-            );
-            display_matrix!(constant_matrix, debug.output);
+            debug.display_matrix(&coefficient_matrix, "Coefficient Matrix");
+            debug.display_matrix(&inverse, "Inverted Matrix");
+            debug.display_matrix(&constant_matrix, "Constant Matrix");
         }
 
         let answer = inverse * constant_matrix;
         if debug.enabled {
-            writeln!(debug.output, "Answers:");
-            display_matrix!(answer, debug.output);
+            debug.display_matrix(&answer, "Answers");
         }
 
         let mut return_me = Vec::with_capacity(row_template.len());
