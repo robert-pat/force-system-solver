@@ -214,8 +214,24 @@ impl Force2D {
 pub(crate) enum EquationCreationError {
     TemplateEmpty,
     NoForcesGiven,
-    ForceNotAtJoint,
-    TemplateDoesNotHaveForce,
+    ForceNotAtJoint(SolverID),
+    TemplateDoesNotHaveForce(SolverID),
+}
+impl std::fmt::Display for EquationCreationError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            EquationCreationError::TemplateEmpty => write!(f, "Template is empty"),
+            EquationCreationError::NoForcesGiven => write!(f, "No forces in joint"),
+            EquationCreationError::TemplateDoesNotHaveForce(i) => {
+                write!(f, "Error: given template does not have force id {}", i)
+            }
+            EquationCreationError::ForceNotAtJoint(i) => write!(
+                f,
+                "Error: joint contains force {} which does not act at its point",
+                i
+            ),
+        }
+    }
 }
 /// Represents the order of unknowns in the rows of the coefficient matrix.
 type MatrixRowTemplate = BTreeMap<SolverID, usize>;
@@ -229,12 +245,6 @@ pub(crate) struct EquationRow {
     constant: f64,
 }
 impl EquationRow {
-    fn new(coefficients: Vec<f64>, constant: f64) -> Self {
-        Self {
-            constant,
-            coefficients,
-        }
-    }
     fn unwrap(self) -> (Vec<f64>, f64) {
         (self.coefficients, self.constant)
     }
@@ -261,16 +271,13 @@ pub(crate) fn build_equations(
     if template.is_empty() {
         return Err(EquationCreationError::TemplateEmpty);
     }
-    if joint.forces.iter().any(|f| f.point_id() != joint.point_id) {
-        return Err(EquationCreationError::ForceNotAtJoint);
-    }
-    if joint
-        .forces
-        .iter()
-        .filter(|f| !matches!(VectorComponent::KnownExactly, f))
-        .any(|f| !template.contains_key(&f.id))
-    {
-        return Err(EquationCreationError::TemplateDoesNotHaveForce);
+    for f in joint.forces.iter() {
+        if f.point_id() != joint.point_id {
+            return Err(EquationCreationError::ForceNotAtJoint(f.id));
+        }
+        if !matches!(VectorComponent::KnownExactly, f) && !template.contains_key(&f.id) {
+            return Err(EquationCreationError::TemplateDoesNotHaveForce(f.id));
+        }
     }
 
     let mut x_coefficients = vec![0f64; template.len()];
@@ -301,8 +308,8 @@ pub(crate) fn build_equations(
     // This is the constant part of the linear equation. In matrix form, it's the value of this row
     // of C in A*B = C. Multiply by -1 bc net force equations are of the form: (sum of things) = 0
     // not (coefficient * variable(s)) = constant
-    let x = EquationRow::new(x_coefficients, x_sum * -1.0);
-    let y = EquationRow::new(y_coefficients, y_sum * -1.0);
+    let x = EquationRow { coefficients: x_coefficients, constant: x_sum * -1.0 };
+    let y = EquationRow { coefficients: y_coefficients, constant: y_sum * -1.0 };
 
     Ok([x, y])
 }
@@ -418,8 +425,8 @@ pub(crate) fn solve_truss(joints: &Vec<TrussJoint2D>, debug: &mut DebugInfo) -> 
     let mut potential_rows: Vec<EquationRow> = Vec::new();
     for joint in joints.iter() {
         let equations = build_equations(joint, &row_template).unwrap();
+        // can't move out of an array
         for equ in equations {
-            // can't move out of an array
             assert_eq!(equ.len(), num_unknowns);
             potential_rows.push(equ);
         }
