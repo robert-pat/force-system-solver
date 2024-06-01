@@ -364,7 +364,7 @@ fn find_unknowns(joints: &Vec<TrussJoint2D>) -> Vec<SolverID> {
         }
     }
 
-    unknowns.sort();
+    unknowns.sort_unstable();
     unknowns.dedup();
     unknowns
 }

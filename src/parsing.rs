@@ -68,7 +68,7 @@ impl DebugInfo {
         }
     }
     /// Display the given matrix, limited to whatever the solver::solve_truss() generates.
-    /// 
+    ///
     /// Will print the name and then each row of the matrix in order. The size of the matrix (rows
     /// and columns) is also logged for ease of reading.
     #[allow(unused)] // rn idgaf if writing to stdout fails
@@ -445,7 +445,6 @@ fn generate_internal_forces(
     // actually create the forces:
     for (id1, id2) in &members {
         let new_id = id1.concatenate(*id2);
-        //let (p1, p2) = (points.get(id1).unwrap(), points.get(id2).unwrap());
         let (p1, p2) = match (points.get(id1), points.get(id2)) {
             (Some(a), Some(b)) => (a, b),
             (Some(_), None) => panic!("Member declared from point that does not exist: {}", id2),
@@ -507,7 +506,7 @@ pub(crate) fn parse_problem(
     debug: &mut DebugInfo,
 ) -> Result<ParsedProblem, ParsingError> {
     let toml_file = match file.parse::<Table>() {
-        Ok(a) => a,
+        Ok(t) => t,
         Err(_) => return Err(ParsingError::InvalidTOMLFile),
     };
     let mut names_record = BTreeMap::new();

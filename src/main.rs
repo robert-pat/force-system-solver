@@ -62,25 +62,21 @@ fn main() {
 
     use std::io::Write;
     for result in solutions {
-        let f_dir = if result.value > 0f64 { "T" } else { "C" };
+        let dir = if result.value > 0f64 { "T" } else { "C" };
         let name = name_conversion.get(&result.force).unwrap();
 
         if info.debug.enabled {
             writeln!(
                 info.debug.output,
-                "Member {} [{}]: {} ({})",
-                name,
-                result.force,
-                result.value,
-                f_dir
+                "Member {} [{}]: {} ({dir})",
+                name, result.force, result.value,
             )
         } else {
             writeln!(
                 info.debug.output,
-                "Member {}: {:.8} ({})",
+                "Member {}: {:.8} ({dir})",
                 name,
                 result.value.abs(),
-                f_dir
             )
         }
         .expect("Couldn't write to output!");
