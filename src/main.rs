@@ -22,13 +22,10 @@ fn main() {
     if info.debug.enabled {
         eprintln!("------------");
         eprintln!("Debug info enabled! The parser & solver will spit out a lot of text!");
-        if info.file_write {
-            eprintln!(
-                "Debug printing to a file is enabled! Results & debug information will be printed to \'answer-{}\'", 
-                info.name
-            );
-        }
         eprintln!("------------");
+    }
+    if info.file_write {
+        eprintln!("File writing is enabled! Output (debug & results) will be printed to \'answer-{}\'.txt", info.name);
     }
 
     let problem = match parsing::parse_problem(file, &mut info.debug) {

@@ -1,0 +1,25 @@
+{
+    "configurations": [
+        {
+            "type": "cargo",
+            "name": "Run Release",
+            "cargoArgs": ["run", "--release"],
+        },
+        {
+            "type": "cargo",
+            "name": "Run",
+            "cargoArgs": ["run"],
+        },
+        {
+            "type": "cargo",
+            "name": "Format",
+            "cargoArgs": ["fmt"],
+        },
+        {
+            "type": "cargo",
+            "name": "Test",
+            "cargoArgs": ["test"],
+        },
+        
+    ]
+}
