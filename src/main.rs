@@ -28,8 +28,8 @@ fn main() {
         eprintln!("File writing is enabled! Output (debug & results) will be printed to \'answer-{}\'.txt", info.name);
     }
 
-    let problem = match parsing::parse_problem(file, &mut info.debug) {
-        Ok(answer) => answer,
+    let (joints, names) = match parsing::parse_problem(file, &mut info.debug) {
+        Ok(r) => (r.joints, r.name_map),
         Err(e) => match e {
             ParsingError::InvalidTOMLFile => panic!("Invalid TOML file provided!"),
             ParsingError::IncorrectPoints(p) => panic!("Invalid Points: {:?}", p),
@@ -39,10 +39,9 @@ fn main() {
             }
         },
     };
-    let (joints, name_conversion) = (problem.joints, problem.name_map);
     if info.debug.enabled {
         writeln!(info.debug.output, "Name Conversion:").unwrap();
-        for (id, name) in name_conversion.iter() {
+        for (id, name) in names.iter() {
             writeln!(info.debug.output, "Id {} is \'{}\'", id, name).unwrap();
         }
 
@@ -60,7 +59,7 @@ fn main() {
     use std::io::Write;
     for result in solutions {
         let dir = if result.value > 0f64 { "T" } else { "C" };
-        let name = name_conversion.get(&result.force).unwrap();
+        let name = names.get(&result.force).unwrap();
 
         if info.debug.enabled {
             writeln!(

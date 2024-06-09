@@ -267,17 +267,17 @@ pub(crate) fn parse_loads(
         };
 
         let direction = match tokens.next() {
-            Some(Value::String(s)) if s.as_str() == "Up" => Direction2D::from_angle(90.0),
+            Some(Value::String(s)) if s.as_str() == "Up" => Direction2D::from_degrees(90.0),
             Some(Value::String(s)) if s.as_str() == "Down" => {
-                Direction2D::from_angle(270.0)
+                Direction2D::from_degrees(270.0)
             }
             Some(Value::String(s)) if s.as_str() == "Left" => {
-                Direction2D::from_angle(180.0)
+                Direction2D::from_degrees(180.0)
             }
-            Some(Value::String(s)) if s.as_str() == "Right" => Direction2D::from_angle(0.0),
+            Some(Value::String(s)) if s.as_str() == "Right" => Direction2D::from_degrees(0.0),
             Some(Value::String(s)) if s.as_str() == "Polar" => match tokens.next() {
-                Some(Value::Float(f)) => Direction2D::from_angle(*f),
-                Some(Value::Integer(i)) => Direction2D::from_angle(*i as f64),
+                Some(Value::Float(f)) => Direction2D::from_degrees(*f),
+                Some(Value::Integer(i)) => Direction2D::from_degrees(*i as f64),
                 Some(o) => panic!("Invalid angle provided for load \'{point_name}\', expected a number and saw \'{:?}\'", o),
                 None => panic!("No direction provided for load \'{point_name}\'!"),
             }
@@ -367,13 +367,13 @@ pub(crate) fn generate_support_reactions(
                 support_reactions.push(Force2D::new(
                     idx,
                     attached_point.clone(),
-                    Direction2D::from_angle(0f64),
+                    Direction2D::from_degrees(0f64),
                     solver::VectorComponent::Unknown,
                 ));
                 support_reactions.push(Force2D::new(
                     idy,
                     attached_point.clone(),
-                    Direction2D::from_angle(90f64),
+                    Direction2D::from_degrees(90f64),
                     solver::VectorComponent::Unknown,
                 ));
             }
@@ -394,10 +394,10 @@ pub(crate) fn generate_support_reactions(
                     id,
                     attached_point.clone(),
                     match dir {
-                        Direction::Up => Direction2D::from_angle(90f64),
-                        Direction::Down => Direction2D::from_angle(270f64),
-                        Direction::Left => Direction2D::from_angle(0f64),
-                        Direction::Right => Direction2D::from_angle(180f64),
+                        Direction::Up => Direction2D::from_degrees(90f64),
+                        Direction::Down => Direction2D::from_degrees(270f64),
+                        Direction::Left => Direction2D::from_degrees(0f64),
+                        Direction::Right => Direction2D::from_degrees(180f64),
                     },
                     solver::VectorComponent::KnownPositive,
                 ));

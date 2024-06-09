@@ -149,7 +149,7 @@ impl Direction2D {
             && self.y.is_normal()
             && (self.x.powf(2.0) + self.y.powf(2.0)).sqrt() == 1f64
     }
-    pub(crate) fn from_angle(theta: f64) -> Self {
+    pub(crate) fn from_degrees(theta: f64) -> Self {
         Self {
             x: theta.to_radians().cos(),
             y: theta.to_radians().sin(),
@@ -158,8 +158,6 @@ impl Direction2D {
 }
 impl PartialEq for Direction2D {
     fn eq(&self, other: &Self) -> bool {
-        // technically because these should always have their magnitude at 1, comparing both
-        // is unnecessary I think.
         self.x == other.x && self.y == other.y
     }
 }
