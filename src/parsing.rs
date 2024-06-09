@@ -1,11 +1,11 @@
-use nalgebra as na;
 use std::cmp::Ordering;
+use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::io::Write;
-use std::{collections::BTreeMap, slice::Iter};
 
+use nalgebra as na;
 use toml::{Table, Value};
 
 use crate::solver;
@@ -89,6 +89,7 @@ impl DebugInfo {
         }
     }
 }
+#[allow(dead_code)]
 struct EmptyWriter();
 impl Write for EmptyWriter {
     #[allow(unused)]
@@ -99,37 +100,6 @@ impl Write for EmptyWriter {
         Ok(())
     }
 }
-/// Turn an iterator over toml Values into a pair of numbers. This will warn if there are more than 2
-/// values in the iterator and panic if there are less than 2 (or if one/both isn't a number). This
-/// function works with both toml::Value::Float and toml::Value::Integer
-fn parse_coordinate_pair(mut value: Iter<Value>, identifier: &str) -> (f64, f64) {
-    let (a, b) = (value.next(), value.next());
-    if value.next().is_some() {
-        eprintln!("Warning! extra items in point definition!");
-        eprintln!(
-            "Point {identifier}: {} has {} extra arguments (they were ignored).",
-            SolverID::new(identifier),
-            value.len() + 1
-        );
-    }
-    match (a, b) {
-        (Some(Value::Float(a)), Some(Value::Float(b))) => return (*a, *b),
-        (Some(Value::Integer(a)), Some(Value::Integer(b))) => return (*a as f64, *b as f64),
-        (Some(Value::Float(a)), Some(Value::Integer(b))) => return (*a, *b as f64),
-        (Some(Value::Integer(a)), Some(Value::Float(b))) => return (*a as f64, *b),
-        _ => {}
-    }
-
-    eprintln!("Error: expected two numbers in the format \'a, b\' in the declaration of a point");
-    eprintln!(
-        "Saw \'{:?}, {:?}\' in the description of point {identifier}: {}.",
-        a,
-        b,
-        SolverID::new(identifier)
-    );
-    panic!("Couldn't parse point coordinates!");
-}
-
 /// Converts a toml value into an array of toml values or panics
 macro_rules! array_me {
     ($value: expr) => {
@@ -184,55 +154,73 @@ fn validate_static_equilibrium() -> Result<(), EquilibriumError> {
 ///
 /// Also updates a map between SolverIDs and names with the names of all points it parses.
 pub(crate) fn parse_points(
-    toml_array: &Value,
-    name_map: &mut BTreeMap<SolverID, String>,
+    point_declarations: &Value,
+    names: &mut BTreeMap<SolverID, String>,
     debug: &mut DebugInfo,
 ) -> BTreeMap<SolverID, Point2D> {
-    let raw_table = array_me!(toml_array);
+    // For reference, declarations are: Name, System, <number>, <number>
+    let declarations = array_me!(point_declarations);
     let mut points: BTreeMap<SolverID, Point2D> = BTreeMap::new();
 
-    for entry in raw_table {
-        // maybe a tokenize! macro would be useful
+    for entry in declarations {
         let mut tokens = match entry {
-            Value::Array(a) if a.len() >= 2 => a.iter(),
-            Value::Array(a) => panic!("Point \'{:?}\' declared with too few values!", a[0]),
-            other => panic!(
-                "Error: expecting array of values to parse points from! Saw {:?}",
-                other
-            ),
+            Value::Array(a) if a.is_empty() => {
+                eprintln!("WARNING: Saw empty point!");
+                continue;
+            }
+            Value::Array(a) if [2, 4].contains(&a.len()) => a.iter(),
+            Value::Array(a) => {
+                eprintln!("Point \'{}\' has the wrong number of values declared", a[0]);
+                panic!("Can't parse point \'{}\'", a[0]);
+            }
+            _a => panic!("Error: points should be declared with a toml array! Saw {_a:?}"),
         };
 
-        let (id, point_name) = match tokens.next() {
-            Some(Value::String(s)) => (SolverID::new(s.as_str()), s.as_str()),
+        // Guaranteed at least 2 Some(_) from tokens
+        let (id, point_name) = match tokens.next().unwrap() {
+            Value::String(s) => (SolverID::new(s.as_str()), s.as_str()),
             other => panic!("Expected a point name (text), but got \'{:?}\'", other),
         };
-
-        let point = match tokens.next() {
-            Some(Value::String(s)) if s.as_str() == "Origin" => Point2D::origin(id),
-            Some(Value::String(s)) if s.as_str() == "Cartesian" => {
-                let (x, y) = parse_coordinate_pair(tokens, point_name);
-                Point2D::cartesian(id, x, y)
-            }
-            Some(Value::String(s)) if s.as_str() == "Polar" => {
-                let (r, theta) = parse_coordinate_pair(tokens, point_name);
-                Point2D::polar(id, r, theta)
-            }
-            Some(other) => panic!("Invalid Point Definition! Expected one of [Origin, Cartesian, Polar] but saw \'{:?}\' at \'{point_name}\'", other),
-            None => panic!("Point missing definition type: point \'{point_name}\' has no location"),
+        let system = match tokens.next().unwrap() {
+            Value::String(s) => s.as_str(),
+            _a => panic!("Point {point_name} has an invalid coordinate system: {_a:?}!"),
+        };
+        let c1 = match tokens.next() {
+            Some(Value::Integer(i)) => *i as f64,
+            Some(Value::Float(f)) => *f,
+            _ => f64::NAN,
+        };
+        let c2 = match tokens.next() {
+            Some(Value::Integer(i)) => *i as f64,
+            Some(Value::Float(f)) => *f,
+            _ => f64::NAN,
         };
 
+        let point = match system {
+            "Origin" => Point2D::origin(id),
+            "Cartesian" => Point2D::cartesian(id, c1, c2),
+            "Polar" => Point2D::polar(id, c1, c2),
+            _a => {
+                eprintln!("Point \'{point_name}\' declared with invalid coordinate system: {_a:?}");
+                panic!("Point coordinate system must be: Origin, Cartesian, or Polar");
+            }
+        };
+
+        // since we introduce the possibility that a coord maybe be NaN or empty
+        assert!(
+            point.is_valid(),
+            "Point \'{point_name}\' declared with non-number coordinates"
+        );
         if debug.enabled {
             writeln!(debug.output, "Parsed point {point_name} to {point}").unwrap();
         }
 
-        match points.insert(id, point) {
-            None => {} // Point was not already created (good ending)
-            Some(_) => {
-                eprintln!("Warning! Duplicate point name declared: \'\'!");
-                panic!("Comment out the extra point with \'#\' to save it for later");
-            }
-        };
-        name_map.insert(id, point_name.to_string());
+        // Check for duplicate points
+        if points.insert(id, point).is_some() {
+            eprintln!("Warning! Duplicate point name declared: \'{point_name}\'!");
+            panic!("Comment out the extra point with \'#\' to save it for later");
+        }
+        names.insert(id, point_name.to_string());
     }
     points
 }
@@ -241,68 +229,80 @@ pub(crate) fn parse_points(
 /// discriminant, as the name suggests. Like other functions of this type, it takes in map to store
 /// human-readable names for each force it parses.
 pub(crate) fn parse_loads(
-    toml_array: &Value,
+    load_declarations: &Value,
     points: &BTreeMap<SolverID, Point2D>,
-    name_map: &mut BTreeMap<SolverID, String>,
+    names: &mut BTreeMap<SolverID, String>,
 ) -> Vec<Force2D> {
-    let raw_forces = array_me!(toml_array);
+    let raw_forces = array_me!(load_declarations);
     let mut forces: Vec<Force2D> = Vec::new();
+    let mut unique_id = 0usize;
 
     for raw_force in raw_forces {
-        let mut tokens = array_me!(raw_force).iter();
-
-        #[allow(unused)] // Used in format strings
-        let (point_id, point_name) = match tokens.next() {
-            Some(Value::String(s)) => (SolverID::new(s.as_str()), s.as_str()),
-            other => panic!(
-                "Expected the name of a point (text), but got \'{:?}\'",
-                other
-            ),
+        let mut tokens = match raw_force {
+            Value::Array(a) if a.is_empty() => {
+                eprintln!("WARING: Empty applied load defined!");
+                continue;
+            }
+            Value::Array(a) if [3, 4].contains(&a.len()) => a.iter(),
+            Value::Array(a) => {
+                eprintln!(
+                    "Load acting at \'{}\' has the wrong number of values declared!",
+                    a[0]
+                );
+                panic!("Couldn't parse the load acting at \'{}\'", a[0]);
+            }
+            _a => panic!("Applied loads must be toml arrays, not: {_a:?}"),
         };
 
-        let magnitude = match tokens.next() {
-            Some(Value::Float(f)) => *f,
-            Some(Value::Integer(i)) => *i as f64,
-            other => panic!("Load \'{point_name}\' has improperly defined magnitude, expended a number but saw \'{:?}\'", other),
+        // Gaunted at least 3 Some(_) from tokens
+        let (point_id, point_name) = match tokens.next().unwrap() {
+            Value::String(s) => (SolverID::new(s.as_str()), s.as_str()),
+            _a => panic!("Expected the name of a point (text), but got \'{_a:?}\'"),
+        };
+        let magnitude = match tokens.next().unwrap() {
+            Value::Float(f) => *f,
+            Value::Integer(i) => *i as f64,
+            _a => panic!("Load \'{point_name}\' has improperly defined magnitude: \'{_a:?}\'"),
         };
 
-        let direction = match tokens.next() {
-            Some(Value::String(s)) if s.as_str() == "Up" => Direction2D::from_degrees(90.0),
-            Some(Value::String(s)) if s.as_str() == "Down" => {
-                Direction2D::from_degrees(270.0)
-            }
-            Some(Value::String(s)) if s.as_str() == "Left" => {
-                Direction2D::from_degrees(180.0)
-            }
-            Some(Value::String(s)) if s.as_str() == "Right" => Direction2D::from_degrees(0.0),
-            Some(Value::String(s)) if s.as_str() == "Polar" => match tokens.next() {
+        let direction = match tokens.next().unwrap() {
+            Value::String(s) if s.as_str() == "Up" => Direction2D::from_degrees(90.0),
+            Value::String(s) if s.as_str() == "Down" => Direction2D::from_degrees(270.0),
+            Value::String(s) if s.as_str() == "Left" => Direction2D::from_degrees(180.0),
+            Value::String(s) if s.as_str() == "Right" => Direction2D::from_degrees(0.0),
+            Value::String(s) if s.as_str() == "Polar" => match tokens.next() {
                 Some(Value::Float(f)) => Direction2D::from_degrees(*f),
                 Some(Value::Integer(i)) => Direction2D::from_degrees(*i as f64),
-                Some(o) => panic!("Invalid angle provided for load \'{point_name}\', expected a number and saw \'{:?}\'", o),
+                Some(_o) => {
+                    panic!("Angle for load at \'{point_name}\' must be degrees, not \'{_o:?}\'")
+                }
                 None => panic!("No direction provided for load \'{point_name}\'!"),
+            },
+            _a => {
+                eprintln!("Invalid direction for applied force at \'{point_name}\': {_a:?}");
+                panic!("Applied forces must be Up, Down, Left, Right, or Polar (with angle)");
             }
-            Some(Value::String(_s)) => panic!("Load \'{point_name}\' has in invalid direction: \'{_s}\' must be [Up, Down, Left, Right, Polar]"),
-            Some(other) => panic!("Invalid value in the direction for force \'{point_name}\', saw {:?}", other),
-            None => panic!("Saw an applied load with no direction! Load \'{point_name}\' must have a direction"),
         };
 
-        // Note: these names are randomized, but that means we can't get an actual name back
-        let load_name_unique = format!("Load {point_name}{}", rand::random::<usize>());
+        // We have to manually give each on of these a unique name bc you can have multiple loads
+        // applied at the same point, but the solver needs each one to have a unique ID.
+        // Could combine all of them to one, but that would be more complex I think?
+        let load_name_unique = format!("Load {unique_id} at {point_name}");
+        unique_id += 1;
+        let point = match points.get(&point_id) {
+            Some(p) => p.clone(),
+            None => {
+                panic!("Loads must be attached to a valid point, \'{point_name}\' does not exist")
+            }
+        };
         let force = Force2D::new(
             SolverID::new(&load_name_unique),
-            match points.get(&point_id) {
-                Some(p) => p.clone(),
-                None => {
-                    panic!(
-                        "Loads must be attached to a valid point, \'{point_name}\' does not exist!"
-                    )
-                }
-            },
+            point,
             direction,
             solver::VectorComponent::KnownExactly(magnitude),
         );
 
-        name_map.insert(SolverID::new(&load_name_unique), load_name_unique);
+        names.insert(SolverID::new(&load_name_unique), load_name_unique);
         forces.push(force);
     }
     forces
@@ -410,12 +410,12 @@ pub(crate) fn generate_support_reactions(
 /// Creates the forces from a structural member on each of the two end points of that member. These fores
 /// have the same ID and are named from the two points that define them.
 fn generate_internal_forces(
-    array: &Value,
+    member_declarations: &Value,
     name_map: &mut BTreeMap<SolverID, String>,
     points: &BTreeMap<SolverID, Point2D>,
 ) -> Vec<Force2D> {
     let mut internal_forces: Vec<Force2D> = Vec::new();
-    let raw_members = array_me!(array);
+    let raw_members = array_me!(member_declarations);
     let mut members: Vec<(SolverID, SolverID)> = Vec::new();
 
     for raw_member in raw_members {

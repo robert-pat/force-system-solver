@@ -120,6 +120,9 @@ impl Point2D {
     pub(crate) fn pos(&self) -> (f64, f64) {
         (self.x, self.y)
     }
+    pub(crate) fn is_valid(&self) -> bool {
+        (self.x == 0f64 || self.x.is_normal()) && (self.y == 0f64 || self.y.is_normal())
+    }
 }
 impl std::fmt::Display for Point2D {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
