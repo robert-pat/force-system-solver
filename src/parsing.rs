@@ -1,8 +1,5 @@
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
-use std::collections::BTreeSet;
-use std::error::Error;
-use std::fmt::{Display, Formatter};
 use std::io::Write;
 
 use nalgebra as na;
@@ -113,41 +110,6 @@ macro_rules! array_me {
     };
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum PointValidationError {
-    DuplicatePosition, // TODO: add the duplicate points' IDs
-}
-#[warn(incomplete_features)]
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum EquilibriumError {}
-
-// TODO: this function should actually do anything
-#[allow(unused)]
-pub(crate) fn validate_points(
-    points: &BTreeMap<SolverID, Point2D>,
-) -> Result<(), PointValidationError> {
-    let mut names: BTreeSet<SolverID> = BTreeSet::new();
-    let mut positions: Vec<(f64, f64)> = Vec::new();
-
-    const TOLERANCE: f64 = 0.00001f64;
-    let to_remove: Vec<usize> = Vec::new();
-    for point in points.values() {
-        let (x, y) = point.pos();
-        if positions.iter().any(|(a, b)| {
-            a - TOLERANCE <= x && x <= a + TOLERANCE && b - TOLERANCE <= y && y <= b + TOLERANCE
-        }) {
-            return Err(PointValidationError::DuplicatePosition);
-        }
-    }
-    Ok(())
-}
-
-#[warn(incomplete_features)]
-#[allow(unused)]
-fn validate_static_equilibrium() -> Result<(), EquilibriumError> {
-    todo!()
-}
-
 /// Takes in a toml::Value::Array and parses it into an array of Point2D for the
 /// solver to use. The function signature doesn't capture this, but the Value passed in
 /// must be the Value::Array(_) variant, or the function will panic.
@@ -245,10 +207,7 @@ pub(crate) fn parse_loads(
             }
             Value::Array(a) if [3, 4].contains(&a.len()) => a.iter(),
             Value::Array(a) => {
-                eprintln!(
-                    "Load acting at \'{}\' has the wrong number of values declared!",
-                    a[0]
-                );
+                eprintln!("Load acting at \'{}\' has the wrong number of values declared!", a[0]);
                 panic!("Couldn't parse the load acting at \'{}\'", a[0]);
             }
             _a => panic!("Applied loads must be toml arrays, not: {_a:?}"),
@@ -411,29 +370,39 @@ pub(crate) fn generate_support_reactions(
 /// have the same ID and are named from the two points that define them.
 fn generate_internal_forces(
     member_declarations: &Value,
-    name_map: &mut BTreeMap<SolverID, String>,
     points: &BTreeMap<SolverID, Point2D>,
+    names: &mut BTreeMap<SolverID, String>,
 ) -> Vec<Force2D> {
     let mut internal_forces: Vec<Force2D> = Vec::new();
     let raw_members = array_me!(member_declarations);
     let mut members: Vec<(SolverID, SolverID)> = Vec::new();
 
     for raw_member in raw_members {
-        let mut tokens = array_me!(raw_member).iter();
+        let mut tokens = match raw_member {
+            Value::Array(a) if a.is_empty() => {
+                eprintln!("WARNING: Empty internal member declared!");
+                continue;
+            }
+            Value::Array(a) if a.len() == 2 => a.iter(),
+            Value::Array(_) => panic!("Internal member declared with incorrect number of points!"),
+            _a => panic!("Internal members must be defined with a toml array! Saw {_a:?}"),
+        };
 
-        // To ensure that the member AB should have the same order at member BA, so we sort
-        // the name map part is bad, but it will prob work for now
-        let (name1, name2) = match (tokens.next(), tokens.next()) {
-            (Some(Value::String(s1)), Some(Value::String(s2))) => match s1.cmp(s2) {
+        // To ensure that member AB has the same order at member BA, we sort.
+        // The name map part is bad, but it will prob work for now
+        let (name1, name2) = match (tokens.next().unwrap(), tokens.next().unwrap()) {
+            (Value::String(s1), Value::String(s2)) => match s1.cmp(s2) {
                 Ordering::Greater => (s1, s2),
                 Ordering::Less => (s2, s1),
-                Ordering::Equal => {eprintln!("Non-existent member declared! {:?}, {:?}", s1, s2); continue}
+                Ordering::Equal => {eprintln!("Non-existent member declared! [{s1:?}, {s2:?}]"); continue;}
             }
-            (a, b) => panic!("Incorrect structural member definition! Expected \'point1 name, point2 name\', got \'{:?}, {:?}\'", a, b)
+            _a => panic!("Incorrect structural member definition! Expected \'point1, point2\', got \'{_a:?}\'")
         };
         let (id1, id2) = (SolverID::new(name1), SolverID::new(name2));
+        let new_id = id1.concatenate(id2);
+
         // ideally this would only be done w/ the de-duped list, but I can't currently think of how
-        name_map.insert(id1.concatenate(id2), format!("{}<->{}", name1, name2));
+        names.insert(new_id, format!("Member {name1}<->{name2}"));
         members.push((id1, id2));
     }
 
@@ -443,17 +412,13 @@ fn generate_internal_forces(
     members.dedup();
 
     // actually create the forces:
-    for (id1, id2) in &members {
-        let new_id = id1.concatenate(*id2);
-        let (p1, p2) = match (points.get(id1), points.get(id2)) {
+    for (id1, id2) in members {
+        let new_id = id1.concatenate(id2);
+        let (p1, p2) = match (points.get(&id1), points.get(&id2)) {
             (Some(a), Some(b)) => (a, b),
             (Some(_), None) => panic!("Member declared from point that does not exist: {}", id2),
             (None, Some(_)) => panic!("Member declared from point that does not exist: {}", id1),
-            // This case is not actually unreachable, (None, None) but IDK how that would happen
-            // this far into the program
-            _ => unreachable!(
-                "Unexpected result in matching point search results when building member forces"
-            ),
+            _ => panic!("Member declared from points that do not exist: {id1}, {id2}"),
         };
         let (d1, d2) = (p1.direction_to(p2), p2.direction_to(p1));
         internal_forces.push(Force2D::new(
@@ -471,28 +436,19 @@ fn generate_internal_forces(
     }
     internal_forces
 }
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ParsingError {
-    InvalidTOMLFile,
-    IncorrectPoints(PointValidationError),
-    #[allow(unused)]
-    NotInEquilibrium,
+    InvalidTOMLFile(toml::de::Error),
+    MissingPointsTable,
+    MissingMembersTable,
+    MissingLoadsTable,
+    MissingSupportsTable,
 }
-impl Display for ParsingError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::InvalidTOMLFile => write!(f, "invalid TOML file"),
-            Self::IncorrectPoints(e) => write!(f, "incorrectly defined points--{:#?}", e),
-            Self::NotInEquilibrium => write!(f, "the initial problem is not in equilibrium"),
-        }
+impl From<toml::de::Error> for ParsingError {
+    fn from(value: toml::de::Error) -> Self {
+        ParsingError::InvalidTOMLFile(value)
     }
 }
-impl From<PointValidationError> for ParsingError {
-    fn from(value: PointValidationError) -> Self {
-        ParsingError::IncorrectPoints(value)
-    }
-}
-impl Error for ParsingError {}
 
 pub struct ParsedProblem {
     pub(crate) name_map: BTreeMap<SolverID, String>,
@@ -505,53 +461,32 @@ pub(crate) fn parse_problem(
     file: String,
     debug: &mut DebugInfo,
 ) -> Result<ParsedProblem, ParsingError> {
-    let toml_file = match file.parse::<Table>() {
-        Ok(t) => t,
-        Err(_) => return Err(ParsingError::InvalidTOMLFile),
-    };
+    let toml_file = file.parse::<Table>()?;
     let mut names_record = BTreeMap::new();
+    let points = {
+        let p = toml_file.get("points").ok_or(ParsingError::MissingPointsTable)?;
+        parse_points(p, &mut names_record, debug)
+    };
 
-    let points = parse_points(
-        toml_file
-            .get("points")
-            .expect("TOML file must define a points array!"),
-        &mut names_record,
-        debug,
-    );
-
-    let internal_forces = generate_internal_forces(
-        toml_file
-            .get("members")
-            .expect("TOML file must define the members composing the truss!"),
-        &mut names_record,
-        &points,
-    );
-
-    let loads = parse_loads(
-        toml_file
-            .get("loads")
-            .expect("TOML file must define a loads array!"),
-        &points,
-        &mut names_record,
-    );
-
-    let support_reactions = generate_support_reactions(
-        toml_file
-            .get("supports")
-            .expect("TOML file must define a \'supports\' array"),
-        &points,
-        &mut names_record,
-    );
+    let internal_forces = {
+        let i = toml_file.get("members").ok_or(ParsingError::MissingMembersTable)?;
+        generate_internal_forces(i, &points, &mut names_record)
+    };
+    let loads = {
+        let l = toml_file.get("loads").ok_or(ParsingError::MissingLoadsTable)?;
+        parse_loads(l, &points, &mut names_record)
+    };
+    let support_reactions = {
+        let s = toml_file.get("supports").ok_or(ParsingError::MissingSupportsTable)?;
+        generate_support_reactions(s, &points, &mut names_record)
+    };
 
     // TODO: include the validations for points, forces, and whatever else
 
-    let mut joints = {
-        let mut map: BTreeMap<SolverID, TrussJoint2D> = BTreeMap::new();
-        for (id, _) in points.iter() {
-            map.insert(*id, TrussJoint2D::empty(*id));
-        }
-        map
-    };
+    let mut joints: BTreeMap<SolverID, TrussJoint2D> = points
+        .keys()
+        .map(|id| (*id, TrussJoint2D::empty(*id)))
+        .collect();
 
     // Add all of the forces we've created onto their respective joints
     for force in loads

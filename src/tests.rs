@@ -9,8 +9,6 @@ use crate::parsing;
 #[cfg(test)]
 use crate::parsing::DebugInfo;
 #[cfg(test)]
-use crate::parsing::PointValidationError;
-#[cfg(test)]
 use crate::solver;
 
 #[test]
@@ -91,30 +89,6 @@ fn check_point_reading() -> Result<(), ()> {
             eprintln!("Point {:?} should've been {:?}", calculated, ans);
             return Err(());
         }
-    }
-    Ok(())
-}
-
-#[test]
-fn check_point_validation() -> Result<(), ()> {
-    let file = std::fs::read_to_string(r"sample-problems/error_points.toml").unwrap();
-    let toml_data = file.parse::<Table>().unwrap();
-
-    let mut points = parsing::parse_points(
-        toml_data.get("points").unwrap(),
-        &mut BTreeMap::new(),
-        &mut DebugInfo::empty(),
-    );
-
-    if parsing::validate_points(&points).is_ok() {
-        eprintln!("Point validation did not error!");
-        return Err(());
-    }
-    points.remove(&solver::SolverID::new("bet"));
-
-    if parsing::validate_points(&points).unwrap_err() != PointValidationError::DuplicatePosition {
-        eprintln!("Point validation did not error when it should've!");
-        return Err(());
     }
     Ok(())
 }

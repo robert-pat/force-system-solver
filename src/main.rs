@@ -1,5 +1,4 @@
 use crate::parsing::ParsingError;
-use crate::solver::SolvingError;
 
 mod parsing;
 mod solver;
@@ -31,11 +30,18 @@ fn main() {
     let (joints, names) = match parsing::parse_problem(file, &mut info.debug) {
         Ok(r) => (r.joints, r.name_map),
         Err(e) => match e {
-            ParsingError::InvalidTOMLFile => panic!("Invalid TOML file provided!"),
-            ParsingError::IncorrectPoints(p) => panic!("Invalid Points: {:?}", p),
-            // This case was planned, but currently will never trigger
-            ParsingError::NotInEquilibrium => {
-                panic!("Truss is not in equilibrium, check the problem.")
+            ParsingError::InvalidTOMLFile(t) => {
+                panic!("Couldn't parse the toml file; {}", t.message())
+            }
+            ParsingError::MissingPointsTable => panic!("File did not contain a points table!"),
+            ParsingError::MissingLoadsTable => {
+                panic!("File did not contain a table of applied loads!")
+            }
+            ParsingError::MissingSupportsTable => {
+                panic!("File did not contain a table for supports!")
+            }
+            ParsingError::MissingMembersTable => {
+                panic!("File did not contain a table for truss members!")
             }
         },
     };
@@ -51,10 +57,8 @@ fn main() {
         }
     }
 
-    let solutions = match solver::solve_truss(&joints, &mut info.debug) {
-        Ok(answer) => answer,
-        Err(SolvingError::NoMatrixWorked) => panic!("No invertible matrix found for this problem!"),
-    };
+    let solutions = solver::solve_truss(&joints, &mut info.debug)
+        .expect("No invertible matrix found for this problem!");
 
     use std::io::Write;
     for result in solutions {
