@@ -1,6 +1,8 @@
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
+use std::fmt::Formatter;
 use std::io::Write;
+use itertools::Itertools;
 
 use nalgebra as na;
 use toml::{Table, Value};
@@ -464,8 +466,12 @@ pub(crate) fn parse_problem(
     let toml_file = file.parse::<Table>()?;
     let mut names_record = BTreeMap::new();
     let points = {
-        let p = toml_file.get("points").ok_or(ParsingError::MissingPointsTable)?;
-        parse_points(p, &mut names_record, debug)
+        let raw = toml_file.get("points").ok_or(ParsingError::MissingPointsTable)?;
+        let p = parse_points(raw, &mut names_record, debug);
+        if let Err(e) = validate_points(&p) {
+            eprintln!("WARNING: {e}");
+        }
+        p
     };
 
     let internal_forces = {
@@ -505,4 +511,42 @@ pub(crate) fn parse_problem(
         name_map: names_record,
         joints: joints.into_values().collect(),
     })
+}
+
+/* Working on proper validation for problems, might need to do this after problem is completed?? 
+ * bc honestly, to might be a lot simpler / make more sense to do all the validation in the solver
+ * with the completely parsed components / forces. Will still need to check that there's enough info
+ * to do that then 
+ */
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+enum PointValidationError {
+    PointOverLaps(SolverID, SolverID),
+}
+impl std::fmt::Display for PointValidationError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PointValidationError::PointOverLaps(a, b) => {
+                write!(f, "two points have very similar positions: {a} and {b} ")
+            }
+        }
+    }
+}
+
+fn validate_points(points: &BTreeMap<SolverID, Point2D>) -> Result<(), PointValidationError> {
+    // we know the points is all be normal & have no duplicate IDs because 
+    // the generating points function checks that
+    let points: Vec<Point2D> = points.values().cloned().collect();
+    for p in points.into_iter().permutations(2) {
+        let (x1, y1) = p[0].pos();
+        let (x2, y2) = p[1].pos();
+        
+        const CLOSE_THRESHOLD: f64 = 0.001f64;
+        if (x1 - x2).abs() <= CLOSE_THRESHOLD && (y1 - y2).abs() <= CLOSE_THRESHOLD {
+            return Err(PointValidationError::PointOverLaps(p[0].id(), p[1].id()));
+        }
+    }
+    
+    // TODO: There are probably other things that need to be checked 
+    
+    Ok(())
 }
