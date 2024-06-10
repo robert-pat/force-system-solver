@@ -1,16 +1,13 @@
-#![allow(unused)]
+use std::cmp::Ordering;
+use std::collections::BTreeMap;
+use std::collections::hash_map::DefaultHasher;
+use std::fmt::{Debug, Formatter};
+use std::hash::Hasher;
 
+use itertools::Itertools;
 use nalgebra as na;
 
 use crate::parsing::DebugInfo;
-use itertools::Itertools;
-use nalgebra::DMatrix;
-use std::cmp::Ordering;
-use std::collections::hash_map::DefaultHasher;
-use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
-use std::fmt::{Debug, Formatter};
-use std::hash::Hasher;
-use std::ops::Mul;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct SolverID(u64);
@@ -35,6 +32,7 @@ impl SolverID {
         h.write(label.as_bytes());
         SolverID(h.finish())
     }
+    #[allow(dead_code)]
     pub(crate) fn from_data(data: &[u8]) -> Self {
         let mut h = DefaultHasher::new();
         h.write(data);
@@ -42,7 +40,7 @@ impl SolverID {
     }
 
     /// Concatenates the two IDs together, producing a new ID.
-    /// The new ID will be the same for the same given inout IDs
+    /// The new ID will be the same for the same given input IDs
     pub(crate) fn concatenate(self, other: SolverID) -> Self {
         match self.0.cmp(&other.0) {
             Ordering::Equal => self,
@@ -99,9 +97,6 @@ impl Point2D {
     pub(crate) fn cartesian(id: SolverID, x: f64, y: f64) -> Self {
         Self { id, x, y }
     }
-    pub(crate) fn has_id(&self, id: &SolverID) -> bool {
-        &self.id == id
-    }
     pub(crate) fn direction_to(&self, other: &Point2D) -> Direction2D {
         let (dx, dy) = (other.x - self.x, other.y - self.y);
         let mag = (dx.powf(2.0) + dy.powf(2.0)).sqrt();
@@ -110,6 +105,7 @@ impl Point2D {
             y: dy / mag,
         }
     }
+    #[allow(dead_code)]
     pub(crate) fn distance_to(&self, other: &Point2D) -> f64 {
         let (dx, dy) = (other.x - self.x, other.y - self.y);
         (dx.powf(2.0) + dy.powf(2.0)).sqrt()
@@ -147,10 +143,10 @@ pub(crate) struct Direction2D {
     y: f64,
 }
 impl Direction2D {
-    fn is_valid(&self) -> bool {
-        self.x.is_normal()
-            && self.y.is_normal()
-            && (self.x.powf(2.0) + self.y.powf(2.0)).sqrt() == 1f64
+    #[allow(dead_code)]
+    pub(crate) fn is_valid(&self) -> bool {
+        (self.x.is_normal() || self.x == 0f64) && (self.y.is_normal() || self.y == 0f64)
+            && (self.x.powf(2.0) + self.y.powf(2.0)).sqrt() - 1f64 <= 0.0000001
     }
     pub(crate) fn from_degrees(theta: f64) -> Self {
         Self {
@@ -180,9 +176,11 @@ pub(crate) enum VectorComponent {
     /// This component of the vector is unknown and may be positive or negative
     Unknown,
     /// This component of the vector is unknown, but must be positive
+    #[allow(dead_code)]
     KnownPositive,
     /// This component of the vector is unknown, but must be negative
-    KnownNegative,
+    #[allow(dead_code)]
+    KnownNegative, // TODO: the known positive / negative variants are never used
     /// This component of the vector is known to have the value contained
     KnownExactly(f64),
 }
@@ -206,6 +204,7 @@ impl Force2D {
     pub fn point_id(&self) -> SolverID {
         self.point.id
     }
+    #[allow(dead_code)]
     pub fn id(&self) -> SolverID {
         self.id
     }
@@ -236,8 +235,6 @@ impl std::fmt::Display for EquationCreationError {
 }
 /// Represents the order of unknowns in the rows of the coefficient matrix.
 type MatrixRowTemplate = BTreeMap<SolverID, usize>;
-/// Represents a full truss (well just it's joints)
-type Truss2D = Vec<TrussJoint2D>;
 
 /// A matrix row made from a linear equation of the form: ax1 + bx2 + ... = constant
 #[derive(Debug, Clone)]
@@ -246,9 +243,6 @@ pub(crate) struct EquationRow {
     constant: f64,
 }
 impl EquationRow {
-    fn unwrap(self) -> (Vec<f64>, f64) {
-        (self.coefficients, self.constant)
-    }
     fn len(&self) -> usize {
         self.coefficients.len()
     }
@@ -260,8 +254,6 @@ impl EquationRow {
 ///
 /// All of the forces passed in should be acting at the same point / be from the same joint.
 /// The rows only contain the coefficients
-#[warn(incomplete_features)]
-#[allow(unused)]
 pub(crate) fn build_equations(
     joint: &TrussJoint2D,
     template: &MatrixRowTemplate,
@@ -276,7 +268,7 @@ pub(crate) fn build_equations(
         if f.point_id() != joint.point_id {
             return Err(EquationCreationError::ForceNotAtJoint(f.id));
         }
-        if !matches!(VectorComponent::KnownExactly, f) && !template.contains_key(&f.id) {
+        if !matches!(f.magnitude, VectorComponent::KnownExactly(_)) && !template.contains_key(&f.id) {
             return Err(EquationCreationError::TemplateDoesNotHaveForce(f.id));
         }
     }
@@ -386,6 +378,7 @@ impl ComputedForce {
 }
 
 type SolvingResult = Result<Vec<ComputedForce>, SolvingError>;
+#[allow(unused_must_use)]
 pub(crate) fn solve_truss(joints: &Vec<TrussJoint2D>, debug: &mut DebugInfo) -> SolvingResult {
     let row_template: BTreeMap<SolverID, usize> = find_unknowns(joints)
         .into_iter()
