@@ -346,7 +346,7 @@ impl std::fmt::Display for TrussJoint2D {
     }
 }
 
-fn find_unknowns(joints: &Vec<TrussJoint2D>) -> Vec<SolverID> {
+fn find_unknowns(joints: &[TrussJoint2D]) -> Vec<SolverID> {
     let mut unknowns: Vec<SolverID> = Vec::new();
     for joint in joints {
         for force in &joint.forces {
@@ -379,7 +379,7 @@ impl ComputedForce {
 
 type SolvingResult = Result<Vec<ComputedForce>, SolvingError>;
 #[allow(unused_must_use)]
-pub(crate) fn solve_truss(joints: &Vec<TrussJoint2D>, debug: &mut DebugInfo) -> SolvingResult {
+pub(crate) fn solve_truss(joints: &[TrussJoint2D], debug: &mut DebugInfo) -> SolvingResult {
     let row_template: BTreeMap<SolverID, usize> = find_unknowns(joints)
         .into_iter()
         .enumerate()
@@ -388,14 +388,11 @@ pub(crate) fn solve_truss(joints: &Vec<TrussJoint2D>, debug: &mut DebugInfo) -> 
     let num_unknowns = row_template.len();
 
     if debug.enabled {
-        writeln!(
-            debug.output,
-            "Unknowns the solver is working with (in row order for the matrices):"
-        );
+        writeln!(debug.output, "Unknowns, in order:");
         for (u, count) in row_template.iter() {
             writeln!(debug.output, "Unknown {count}: {u}");
         }
-        writeln!(debug.output, "End Unknowns ----");
+        writeln!(debug.output);
     }
 
     if num_unknowns > joints.len() * 2 {
@@ -417,16 +414,9 @@ pub(crate) fn solve_truss(joints: &Vec<TrussJoint2D>, debug: &mut DebugInfo) -> 
     }
 
     if debug.enabled {
-        writeln!(
-            debug.output,
-            "Potential Equations [coefficients] = constant:"
-        );
+        writeln!(debug.output, "Possible Equations (Coefficients):");
         for (count, row) in potential_rows.iter().enumerate() {
-            writeln!(
-                debug.output,
-                "Potential Equation {count}: {:?} = {}",
-                row.coefficients, row.constant
-            );
+            writeln!(debug.output, "Equation {count}: {:?} = {}", row.coefficients, row.constant);
         }
     }
 
@@ -451,7 +441,7 @@ pub(crate) fn solve_truss(joints: &Vec<TrussJoint2D>, debug: &mut DebugInfo) -> 
 
         assert_eq!(coefficient_matrix.len(), num_unknowns.pow(2));
         assert_eq!(constant_matrix.len(), num_unknowns);
-
+        
         // .clone() should be worth the debug info like 99.9% of the time
         let inverse = match coefficient_matrix.clone().try_inverse() {
             Some(i) => i,
