@@ -3,6 +3,7 @@ use crate::parsing::ParsingError;
 mod parsing;
 mod solver;
 mod tests;
+mod display;
 
 /// Statics problem solver! Solving 2D Trusses in Static Equilibrium
 fn main() {

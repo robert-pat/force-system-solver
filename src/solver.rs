@@ -441,7 +441,7 @@ pub(crate) fn solve_truss(joints: &[TrussJoint2D], debug: &mut DebugInfo) -> Sol
 
         assert_eq!(coefficient_matrix.len(), num_unknowns.pow(2));
         assert_eq!(constant_matrix.len(), num_unknowns);
-        
+
         // .clone() should be worth the debug info like 99.9% of the time
         let inverse = match coefficient_matrix.clone().try_inverse() {
             Some(i) => i,
