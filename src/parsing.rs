@@ -551,11 +551,36 @@ fn validate_points(points: &BTreeMap<SolverID, Point2D>) -> Result<(), PointVali
     Ok(())
 }
 
+#[allow(dead_code, unused)]
+fn make_truss_new(file: String, debug: &mut DebugInfo) -> Truss2D {
+    let toml_file = file.parse::<Table>().unwrap();
+    let mut names_record = BTreeMap::new();
+    let points = {
+        let raw = toml_file.get("points").unwrap();
+        parse_points(raw, &mut names_record, debug)
+    };
+
+    let internal_forces = {
+        let i = toml_file.get("members").unwrap();
+        generate_internal_forces(i, &points, &mut names_record)
+    };
+    let loads = {
+        let l = toml_file.get("loads").unwrap();
+        parse_loads(l, &points, &mut names_record)
+    };
+    let support_reactions = {
+        let s = toml_file.get("supports").unwrap();
+        generate_support_reactions(s, &points, &mut names_record)
+    };
+
+    todo!("Build the truss from this information")
+}
 
 /* ---- Experiments Below Here! -----*/
 enum Support {}
 
-struct Truss2D {
+#[allow(dead_code)]
+pub(crate) struct Truss2D {
     points: HashMap<SolverID, Point2D>,
     connections: Vec<(SolverID, SolverID)>,
     loads: HashMap<SolverID, Force2D>,
@@ -608,7 +633,7 @@ macro_rules! open_name {
 }
 
 #[derive(Clone, Debug)]
-enum ConversionError {
+pub(crate) enum ConversionError {
     NotATable(String),
     IncorrectLength(String),
     InvalidFormat(String),
@@ -637,9 +662,10 @@ impl std::fmt::Display for ConversionError {
 ///
 /// Result<HashMap<SolverID, Point2D>, ConversionError>
 type PointsResult = Result<HashMap<SolverID, Point2D>, ConversionError>;
-/// Attempt to convert the given [toml::Value] into [Point2D]s, may fail with a
+/// Attempt to convert the given [Value] into [Point2D]s, may fail with a
 /// [ConversionError] that contains more details. Any returned parsing errors are likely not
 /// recoverable, as they require modification to the input file.
+#[allow(dead_code)]
 fn into_points(t: &Value, names: &mut HashMap<SolverID, String>) -> PointsResult {
     let table = open_array!(t, points_array)?;
     let mut points = HashMap::with_capacity(table.len());
@@ -652,7 +678,7 @@ fn into_points(t: &Value, names: &mut HashMap<SolverID, String>) -> PointsResult
             _ => return Err(
                 ConversionError::IncorrectLength(format!(
                     "Point {:?} declared with the wrong number of items! Must be 2 (for the origin) or 4 (otherwise)",
-                    raw_point.get(0).unwrap() // allowed bc zero length items are ignored
+                    raw_point.first().unwrap() // allowed bc zero length items are ignored
                 ))
             ),
         };
@@ -663,7 +689,7 @@ fn into_points(t: &Value, names: &mut HashMap<SolverID, String>) -> PointsResult
             ));
         };
         if raw_point.len() == 2 {
-            if Some("Origin") != (&raw_point[1]).as_str() {
+            if Some("Origin") != raw_point[1].as_str() {
                 let m = format!("point {name} has 2 items, but is declared with {:?} instead of Origin", &raw_point[1]);
                 return Err(ConversionError::InvalidFormat(m));
             }
