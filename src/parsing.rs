@@ -2,6 +2,7 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Formatter;
 use std::io::Write;
+use cgmath::AbsDiffEq;
 
 use itertools::Itertools;
 use nalgebra as na;
@@ -58,6 +59,7 @@ pub(crate) struct DebugInfo {
     pub(crate) output: Box<dyn Write>,
 }
 impl DebugInfo {
+    #[allow(unused)]
     pub(crate) fn empty() -> Self {
         DebugInfo {
             enabled: false,
@@ -485,8 +487,6 @@ pub(crate) fn parse_problem(
         generate_support_reactions(s, &points, &mut names_record)
     };
 
-    // TODO: include the validations for points, forces, and whatever else
-
     let mut joints: BTreeMap<SolverID, TrussJoint2D> = points
         .keys()
         .map(|id| (*id, TrussJoint2D::empty(*id)))
@@ -543,17 +543,13 @@ fn validate_points(points: &BTreeMap<SolverID, Point2D>) -> Result<(), PointVali
             return Err(PointValidationError::PointOverLaps(p[0].id(), p[1].id()));
         }
     }
-    
-    // TODO: There are probably other things that need to be checked 
-    
     Ok(())
 }
 
 /* ---- Experiments Below Here! -----*/
 
-/// Opens the given part of a toml table, the name of the table is passed as a raw ident (no quotes)
+/// Gets the specified [Value] from the provided [Table]
 macro_rules! open_table {
-    // TODO: may want to move this to take in an &str instead of raw ident text
     ($value:expr, $table:expr) => {
         {
             let a: &str = $table.into();
@@ -570,6 +566,14 @@ enum Support {
     Pin{at: SolverID},
     Roller{at: SolverID, dir: Direction2D},
 }
+impl Support {
+    fn at(&self) -> SolverID {
+        match self {
+            Support::Pin {at} => *at,
+            Support::Roller {at, dir: _dir } => *at,
+        }
+    }
+}
 struct AppliedLoad {
     id: SolverID,
     at: SolverID,
@@ -577,11 +581,6 @@ struct AppliedLoad {
     mag: VectorComponent
 }
 
-/* Things to validate for this struct to be constructed:
-    1) Each connection starts & ends at a valid point
-    2) Each applied load is attached to a valid point
-    3) No two points are too close to each other
-    4) Supports are attached at a valid point */
 #[allow(dead_code)]
 pub(crate) struct Truss2D {
     points: HashMap<SolverID, Point2D>,
@@ -590,12 +589,31 @@ pub(crate) struct Truss2D {
     supports: HashMap<SolverID, Support>,
     pub(crate) names: HashMap<SolverID, String>
 }
+pub(crate) enum TrussCreationError {
+    Conversion(ConversionError),
+    PointNonExistent(String),
+    PointsOverlap(String),
+}
+impl std::fmt::Display for TrussCreationError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TrussCreationError::Conversion(c) => write!(f, "{c}"),
+            TrussCreationError::PointsOverlap(s) => write!(f, "{s}"),
+            TrussCreationError::PointNonExistent(s) => write!(f, "{s}"),
+        }
+    }
+}
+impl From<ConversionError> for TrussCreationError {
+    fn from(value: ConversionError) -> Self {
+        TrussCreationError::Conversion(value)
+    }
+}
 impl Truss2D {
     /// Try to turn the given [Table] into a [Truss2D]. The function will error on the first issue
     /// it encounters; the returned [ConversionError] has a message with details about what the
     /// problem was. Note empty definitions are ignored while duplicates are errors.
     #[allow(dead_code)]
-    pub(crate) fn new(t: toml::Table) -> Result<Self, ConversionError> {
+    pub(crate) fn new(t: Table) -> Result<Self, TrussCreationError> {
         let mut names: HashMap<SolverID, String> = HashMap::new();
 
         let points = into_points(open_table!(&t, "points")?, &mut names)?;
@@ -603,7 +621,39 @@ impl Truss2D {
         let loads = into_loads(open_table!(&t, "loads")?, &mut names)?;
         let supports = into_supports(open_table!(&t, "supports")?, &mut names)?;
 
-        // TODO: check properties of all of these things (see comment on Truss2D)
+        // check to make sure everything is defined at a valid point
+        for (a, b) in &connections {
+            let combined = names.get(&a.concatenate(*b)).unwrap();
+            if !points.contains_key(a) || !points.contains_key(b) {
+                return Err(TrussCreationError::PointNonExistent(
+                    format!("{combined} is attached to a point that does not exist")
+                ));
+            }
+        }
+        if let Some(l) = loads.iter().find(|(_, l)| !points.contains_key(&l.at)) {
+            let name = names.get(l.0).unwrap();
+            return Err(TrussCreationError::PointNonExistent(
+                format!("{name} is attached to a point that does not exist")
+            ));
+        }
+        if let Some(s) = supports.iter().find(|(_, s)| !points.contains_key(&s.at())) {
+            let name = names.get(s.0).unwrap();
+            return Err(TrussCreationError::PointNonExistent(
+                format!("{name} is attached to a point that does not exist")
+            ));
+        }
+        // make sure points don't overlap
+        for points in points.values().combinations(2) {
+            let (p1, p2) = (points[0].pos(), points[1].pos());
+            let threshold = 0.0001f64; // completely arbitrary, esp since we're unit-less
+            if p1.0.abs_diff_eq(&p2.0, threshold) && p1.1.abs_diff_eq(&p2.1, threshold) {
+                let n1 = names.get(&points[0].id()).unwrap();
+                let n2 = names.get(&points[1].id()).unwrap();
+                return Err(TrussCreationError::PointsOverlap(
+                    format!("Points {n1} and {n2} are within {threshold} of each other")
+                ));
+            }
+        }
 
         Ok(Truss2D {
             points,
@@ -886,9 +936,8 @@ fn into_loads(t: &Value, names: &mut HashMap<SolverID, String>) -> LoadsResult {
             },
             _ => unreachable!(),
         };
-        if names.insert(l_id, l_name).is_some() {
-            todo!()
-        }
+        // no duplicates, bc a point can have multiple loads & the names are created to be unique
+        names.insert(l_id, l_name);
         loads.insert(l_id, AppliedLoad {
             id: l_id,
             at: SolverID::new(p_name),

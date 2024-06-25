@@ -12,21 +12,21 @@ fn main() {
     if std::env::args().any(|a| a.as_str() == "-n") {
         use CommandLineProgramError as CLPE;
         match use_new_parser(ask_user_for_path()) {
-            Err(CLPE::Solving(e)) => {
+            Err(CLPE::Solving(_e)) => {
                 eprintln!("Error in the solver:");
-                panic!("{e:?}");
+                panic!("{_e:?}");
             },
-            Err(CLPE::Parsing(e)) => {
+            Err(CLPE::Parsing(_e)) => {
                 eprintln!("Error parsing file from toml:");
-                panic!("{e:?}");
+                panic!("{_e:?}");
             },
-            Err(CLPE::FileIO(e)) => {
+            Err(CLPE::FileIO(_e)) => {
                 eprintln!("Error with FileIO:");
-                panic!("{e}");
+                panic!("{_e}");
             },
-            Err(CLPE::Conversion(e)) => {
+            Err(CLPE::Conversion(_e)) => {
                 eprintln!("Error converting to Truss");
-                panic!("{e}");
+                panic!("{_e}");
             },
             Ok(_) => {},
         };
@@ -135,7 +135,7 @@ fn ask_user_for_path() -> String {
 }
 
 enum CommandLineProgramError {
-    Conversion(parsing::ConversionError),
+    Conversion(parsing::TrussCreationError),
     Solving(solver::SolvingError),
     FileIO(String),
     Parsing(String),
