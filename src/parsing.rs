@@ -548,7 +548,9 @@ fn validate_points(points: &BTreeMap<SolverID, Point2D>) -> Result<(), PointVali
 
 /* ---- Experiments Below Here! -----*/
 
-/// Gets the specified [Value] from the provided [Table]
+/// Grabs the specified sub-table from the [Table] provided. This macro is effectively the same as
+/// the included [Table::get()] method, but it returns a Result<_, [ConversionError]> instead of an
+/// Option<_>
 macro_rules! open_table {
     ($value:expr, $table:expr) => {
         {
@@ -562,6 +564,8 @@ macro_rules! open_table {
         }
     };
 }
+/// An external support at a joint in the truss; support reactions with known directions, but
+/// unknown magnitudes. It may be a pin support or a roller.
 enum Support {
     Pin{at: SolverID},
     Roller{at: SolverID, dir: Direction2D},
@@ -574,6 +578,8 @@ impl Support {
         }
     }
 }
+/// An external load applied to the truss at a specific point. These forces have both known 
+/// directions and a known magnitude. 
 struct AppliedLoad {
     id: SolverID,
     at: SolverID,
@@ -581,7 +587,14 @@ struct AppliedLoad {
     mag: VectorComponent
 }
 
-#[allow(dead_code)]
+/// Represents a two-dimensional truss in static equilibrium. Trusses are made up of structural
+/// members connected at shared points, and supports connected to the structure at these joints.
+/// Trusses constructed like this may be analyzed with the method of joints. The [Truss2D::condense]
+/// method allows for this.
+/// 
+/// This struct holds all of the necessary information to display and solve a truss and 
+/// human-friendly names for each relevant truss component. It is guaranteed to be valid, with 
+/// all truss members, supports, and applied loads acting only at valid joints.
 pub(crate) struct Truss2D {
     points: HashMap<SolverID, Point2D>,
     connections: Vec<(SolverID, SolverID)>,
@@ -589,6 +602,9 @@ pub(crate) struct Truss2D {
     supports: HashMap<SolverID, Support>,
     pub(crate) names: HashMap<SolverID, String>
 }
+/// An error encountered in the process of creating a new [Truss2D]. Can contain either 
+/// [ConversionError]s from unwrapping values from a toml file, or issues found when validating the
+/// truss.
 pub(crate) enum TrussCreationError {
     Conversion(ConversionError),
     PointNonExistent(String),
@@ -610,9 +626,8 @@ impl From<ConversionError> for TrussCreationError {
 }
 impl Truss2D {
     /// Try to turn the given [Table] into a [Truss2D]. The function will error on the first issue
-    /// it encounters; the returned [ConversionError] has a message with details about what the
-    /// problem was. Note empty definitions are ignored while duplicates are errors.
-    #[allow(dead_code)]
+    /// it encounters; the returned [TrussCreationError] has a message with details about what the
+    /// problem was. Note empty definitions are ignored while duplicate ones are errors.
     pub(crate) fn new(t: Table) -> Result<Self, TrussCreationError> {
         let mut names: HashMap<SolverID, String> = HashMap::new();
 
@@ -663,8 +678,11 @@ impl Truss2D {
             names
         })
     }
-    /// Produce a set of [TrussJoint2D]s that the solver can use to solve for the truss
-    #[allow(dead_code)]
+    /// Produce a set of [TrussJoint2D]s that can be used to solve for the unknown forces in this
+    /// truss. 
+    /// 
+    /// NOTE: currently there is not a way to convert the force components for a pin back into the
+    /// human-friendly names, but everything else can be compared to this truss's names field.
     pub(crate) fn condense(&self) -> Vec<TrussJoint2D> {
         let mut joints: HashMap<SolverID, TrussJoint2D> = self.points
             .keys()
