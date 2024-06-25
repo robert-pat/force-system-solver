@@ -82,7 +82,7 @@ impl DebugInfo {
         for row in m.row_iter() {
             write!(self.output, "[ ");
             for v in row.iter() {
-                write!(self.output, "{}, ", *v);
+                write!(self.output, "{:.14}, ", *v);
             }
             writeln!(self.output, "]");
         }
