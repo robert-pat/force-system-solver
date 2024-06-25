@@ -8,6 +8,32 @@ mod display;
 
 /// Statics problem solver! Solving 2D Trusses in Static Equilibrium
 fn main() {
+    // ---- Experimental Changes -----
+    if std::env::args().any(|a| a.as_str() == "-n") {
+        use CommandLineProgramError as CLPE;
+        match use_new_parser(ask_user_for_path()) {
+            Err(CLPE::Solving(e)) => {
+                eprintln!("Error in the solver:");
+                panic!("{e:?}");
+            },
+            Err(CLPE::Parsing(e)) => {
+                eprintln!("Error parsing file from toml:");
+                panic!("{e:?}");
+            },
+            Err(CLPE::FileIO(e)) => {
+                eprintln!("Error with FileIO:");
+                panic!("{e}");
+            },
+            Err(CLPE::Conversion(e)) => {
+                eprintln!("Error converting to Truss");
+                panic!("{e}");
+            },
+            Ok(_) => {},
+        };
+        return;
+    }
+
+
     // get the file we need, skip the program name (first arg)
     let file_path = std::env::args().nth(2).unwrap_or_else(ask_user_for_path);
     let file = match std::fs::read_to_string(&file_path) {
@@ -106,4 +132,56 @@ fn ask_user_for_path() -> String {
         return String::from("sample-problems\\problem-one.toml");
     }
     s.trim().to_string() // I know, I know
+}
+
+enum CommandLineProgramError {
+    Conversion(parsing::ConversionError),
+    Solving(solver::SolvingError),
+    FileIO(String),
+    Parsing(String),
+}
+fn use_new_parser(p: impl AsRef<std::path::Path>) -> Result<(), CommandLineProgramError> {
+    let file = match std::fs::read_to_string(p) {
+        Ok(s) => s,
+        Err(e) => return Err(CommandLineProgramError::FileIO(e.to_string())),
+    };
+    let table = match file.parse::<toml::Table>() {
+        Ok(t) => t,
+        Err(e) => return Err(CommandLineProgramError::Parsing(e.to_string())),
+    };
+    let truss = match parsing::Truss2D::new(table) {
+        Ok(t) => t,
+        Err(e) => return Err(CommandLineProgramError::Conversion(e)),
+    };
+    let mut info = parsing::DebugInfo {
+        enabled: true,
+        output: Box::new(std::io::stderr()),
+    };
+
+    eprintln!("Names Conversion List:");
+    for (id, name) in &truss.names {
+        eprintln!("Item {id} has name: {name}");
+    }
+    eprintln!();
+
+    let joints = truss.condense();
+    eprintln!("Joints build from truss:");
+    for j in &joints {
+        eprintln!("{j}");
+    }
+    eprintln!();
+
+    let solutions = match solver::solve_truss(&joints, &mut info) {
+        Ok(v) => v,
+        Err(e) => return Err(CommandLineProgramError::Solving(e)),
+    };
+    eprintln!();
+    for solution in solutions {
+        let name = match truss.names.get(&solution.force) {
+            Some(n) => n.as_str(),
+            None => "no name found"
+        };
+        eprintln!("Item {name} ({}) has value {:.8}", solution.force, solution.value);
+    }
+    Ok(())
 }

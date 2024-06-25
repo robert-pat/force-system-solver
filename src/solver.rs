@@ -154,6 +154,18 @@ impl Direction2D {
             y: theta.to_radians().sin(),
         }
     }
+    pub(crate) fn up() -> Self {
+        Direction2D::from_degrees(90f64)
+    }
+    pub(crate) fn down() -> Self {
+        Direction2D::from_degrees(270f64)
+    }
+    pub(crate) fn left() -> Self {
+        Direction2D::from_degrees(180f64)
+    }
+    pub(crate) fn right() -> Self {
+        Direction2D::from_degrees(0f64)
+    }
 }
 impl PartialEq for Direction2D {
     fn eq(&self, other: &Self) -> bool {

@@ -2,13 +2,12 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Formatter;
 use std::io::Write;
-use itertools::Itertools;
 
+use itertools::Itertools;
 use nalgebra as na;
 use toml::{Table, Value};
 
-use crate::solver;
-use crate::solver::{Direction2D, Force2D, Point2D, SolverID, TrussJoint2D};
+use crate::solver::{Direction2D, Force2D, Point2D, SolverID, TrussJoint2D, VectorComponent};
 
 pub(crate) struct ProblemInformation {
     pub(crate) name: String,
@@ -59,7 +58,6 @@ pub(crate) struct DebugInfo {
     pub(crate) output: Box<dyn Write>,
 }
 impl DebugInfo {
-    #[cfg(test)] // Used in tests & otherwise should always have a valid output
     pub(crate) fn empty() -> Self {
         DebugInfo {
             enabled: false,
@@ -260,7 +258,7 @@ pub(crate) fn parse_loads(
             SolverID::new(&load_name_unique),
             point,
             direction,
-            solver::VectorComponent::KnownExactly(magnitude),
+            VectorComponent::KnownExactly(magnitude),
         );
 
         names.insert(SolverID::new(&load_name_unique), load_name_unique);
@@ -329,13 +327,13 @@ pub(crate) fn generate_support_reactions(
                     idx,
                     attached_point.clone(),
                     Direction2D::from_degrees(0f64),
-                    solver::VectorComponent::Unknown,
+                    VectorComponent::Unknown,
                 ));
                 support_reactions.push(Force2D::new(
                     idy,
                     attached_point.clone(),
                     Direction2D::from_degrees(90f64),
-                    solver::VectorComponent::Unknown,
+                    VectorComponent::Unknown,
                 ));
             }
             Support::Roller => {
@@ -360,7 +358,7 @@ pub(crate) fn generate_support_reactions(
                         Direction::Left => Direction2D::from_degrees(0f64),
                         Direction::Right => Direction2D::from_degrees(180f64),
                     },
-                    solver::VectorComponent::KnownPositive,
+                    VectorComponent::KnownPositive,
                 ));
             }
         };
@@ -427,13 +425,13 @@ fn generate_internal_forces(
             new_id,
             p1.clone(),
             d1,
-            solver::VectorComponent::Unknown,
+            VectorComponent::Unknown,
         ));
         internal_forces.push(Force2D::new(
             new_id,
             p2.clone(),
             d2,
-            solver::VectorComponent::Unknown,
+            VectorComponent::Unknown,
         ));
     }
     internal_forces
@@ -551,40 +549,119 @@ fn validate_points(points: &BTreeMap<SolverID, Point2D>) -> Result<(), PointVali
     Ok(())
 }
 
-#[allow(dead_code, unused)]
-fn make_truss_new(file: String, debug: &mut DebugInfo) -> Truss2D {
-    let toml_file = file.parse::<Table>().unwrap();
-    let mut names_record = BTreeMap::new();
-    let points = {
-        let raw = toml_file.get("points").unwrap();
-        parse_points(raw, &mut names_record, debug)
-    };
+/* ---- Experiments Below Here! -----*/
 
-    let internal_forces = {
-        let i = toml_file.get("members").unwrap();
-        generate_internal_forces(i, &points, &mut names_record)
+/// Opens the given part of a toml table, the name of the table is passed as a raw ident (no quotes)
+macro_rules! open_table {
+    // TODO: may want to move this to take in an &str instead of raw ident text
+    ($value:expr, $table:expr) => {
+        {
+            let a: &str = $table.into();
+            match $value.get(a) {
+                Some(v) => Ok(v),
+                None => Err(ConversionError::NotATable(
+                    format!("missing table in toml file: ") + a
+                ))
+            }
+        }
     };
-    let loads = {
-        let l = toml_file.get("loads").unwrap();
-        parse_loads(l, &points, &mut names_record)
-    };
-    let support_reactions = {
-        let s = toml_file.get("supports").unwrap();
-        generate_support_reactions(s, &points, &mut names_record)
-    };
-
-    todo!("Build the truss from this information")
+}
+enum Support {
+    Pin{at: SolverID},
+    Roller{at: SolverID, dir: Direction2D},
+}
+struct AppliedLoad {
+    id: SolverID,
+    at: SolverID,
+    dir: Direction2D,
+    mag: VectorComponent
 }
 
-/* ---- Experiments Below Here! -----*/
-enum Support {}
-
+/* Things to validate for this struct to be constructed:
+    1) Each connection starts & ends at a valid point
+    2) Each applied load is attached to a valid point
+    3) No two points are too close to each other
+    4) Supports are attached at a valid point */
 #[allow(dead_code)]
 pub(crate) struct Truss2D {
     points: HashMap<SolverID, Point2D>,
     connections: Vec<(SolverID, SolverID)>,
-    loads: HashMap<SolverID, Force2D>,
+    loads: HashMap<SolverID, AppliedLoad>,
     supports: HashMap<SolverID, Support>,
+    pub(crate) names: HashMap<SolverID, String>
+}
+impl Truss2D {
+    /// Try to turn the given [Table] into a [Truss2D]. The function will error on the first issue
+    /// it encounters; the returned [ConversionError] has a message with details about what the
+    /// problem was. Note empty definitions are ignored while duplicates are errors.
+    #[allow(dead_code)]
+    pub(crate) fn new(t: toml::Table) -> Result<Self, ConversionError> {
+        let mut names: HashMap<SolverID, String> = HashMap::new();
+
+        let points = into_points(open_table!(&t, "points")?, &mut names)?;
+        let connections = into_connections(open_table!(&t, "members")?, &mut names)?;
+        let loads = into_loads(open_table!(&t, "loads")?, &mut names)?;
+        let supports = into_supports(open_table!(&t, "supports")?, &mut names)?;
+
+        // TODO: check properties of all of these things (see comment on Truss2D)
+
+        Ok(Truss2D {
+            points,
+            connections,
+            loads,
+            supports,
+            names
+        })
+    }
+    /// Produce a set of [TrussJoint2D]s that the solver can use to solve for the truss
+    #[allow(dead_code)]
+    pub(crate) fn condense(&self) -> Vec<TrussJoint2D> {
+        let mut joints: HashMap<SolverID, TrussJoint2D> = self.points
+            .keys()
+            .map(|p| (*p, TrussJoint2D::empty(*p)))
+            .collect();
+        for (id_1, id_2) in &self.connections {
+            let new_id = id_1.concatenate(*id_2);
+            let (p1, p2) = (self.points.get(id_1).unwrap(), self.points.get(id_2).unwrap());
+            let (d1, d2) = (p1.direction_to(p2), p2.direction_to(p1));
+
+            joints.get_mut(id_1).unwrap().add(
+                Force2D::new(new_id, p1.clone(), d1, VectorComponent::Unknown)
+            );
+            joints.get_mut(id_2).unwrap().add(
+                Force2D::new(new_id, p2.clone(), d2, VectorComponent::Unknown)
+            );
+        }
+        for load in self.loads.values() {
+            let joint = joints.get_mut(&load.at).unwrap();
+            let point = self.points.get(&load.at).unwrap();
+            joint.add(Force2D::new(load.id, point.clone(), load.dir, load.mag));
+        }
+        for (id, support) in &self.supports {
+            match support {
+                Support::Pin {at} => {
+                    /* TODO: how to get this information back from the solver? After solving we'll
+                        have "Pin {#}x at {point}" as a SolverID, but how to know that corresponds
+                        to an x component of this pin */
+                    let x_id = id.concatenate(SolverID::new("x"));
+                    let y_id = id.concatenate(SolverID::new("y"));
+
+                    let joint = joints.get_mut(at).unwrap();
+                    let point = self.points.get(at).unwrap();
+
+                    joint.add(Force2D::new(x_id, point.clone(), Direction2D::right(), VectorComponent::Unknown));
+                    joint.add(Force2D::new(y_id, point.clone(), Direction2D::up(), VectorComponent::Unknown));
+                },
+                Support::Roller {at, dir} => {
+                    let joint = joints.get_mut(at).unwrap();
+                    let point = self.points.get(at).unwrap();
+                    joint.add(Force2D::new(*id, point.clone(), *dir, VectorComponent::Unknown));
+                },
+            }
+        }
+
+        joints.into_values().collect()
+    }
 }
 
 /// Attempts to turn a toml::Value into a toml::Value::Array,
@@ -646,7 +723,7 @@ impl std::fmt::Display for ConversionError {
             CE::NotATable(_) => write!(f, "Did not get a toml table where expected: ")?,
             CE::IncorrectLength(_) => write!(f, "Declared item has the wrong length:")?,
             CE::InvalidFormat(_) => write!(f, "An item was declared with the wrong values or format:")?,
-            CE::ConflictingDefinitions(_) => write!(f, "Conflicting definitions were found for an item:")?,
+            CE::ConflictingDefinitions(_) => write!(f, "Conflicting definitions were found for an item; you can use \'#\' to ignore one")?,
         }
         let message = match self {
             CE::NotATable(s) => s.as_str(),
@@ -665,7 +742,6 @@ type PointsResult = Result<HashMap<SolverID, Point2D>, ConversionError>;
 /// Attempt to convert the given [Value] into [Point2D]s, may fail with a
 /// [ConversionError] that contains more details. Any returned parsing errors are likely not
 /// recoverable, as they require modification to the input file.
-#[allow(dead_code)]
 fn into_points(t: &Value, names: &mut HashMap<SolverID, String>) -> PointsResult {
     let table = open_array!(t, points_array)?;
     let mut points = HashMap::with_capacity(table.len());
@@ -674,7 +750,7 @@ fn into_points(t: &Value, names: &mut HashMap<SolverID, String>) -> PointsResult
         let raw_point = open_array!(raw_point, point_specific)?;
         match raw_point.len() {
             0 => continue,
-            2..=4 => {}, // Handle later
+            2 | 4 => {}, // Handle later
             _ => return Err(
                 ConversionError::IncorrectLength(format!(
                     "Point {:?} declared with the wrong number of items! Must be 2 (for the origin) or 4 (otherwise)",
@@ -685,7 +761,7 @@ fn into_points(t: &Value, names: &mut HashMap<SolverID, String>) -> PointsResult
         let (name, id) = open_name!(&raw_point[0], point_name_inner)?;
         if names.insert(id, name.to_string()).is_some() {
             return Err(ConversionError::ConflictingDefinitions(
-                format!("point {name} has been declared twice! Use \'#\' to ignore it!")
+                format!("point {name} has been declared twice!")
             ));
         };
         if raw_point.len() == 2 {
@@ -718,4 +794,157 @@ fn into_points(t: &Value, names: &mut HashMap<SolverID, String>) -> PointsResult
     Ok(points)
 }
 
-// TODO: next up: internal forces from toml tables :D
+type ConnectionsResult = Result<Vec<(SolverID, SolverID)>, ConversionError>;
+fn into_connections(t: &Value, names: &mut HashMap<SolverID, String>) -> ConnectionsResult {
+    let raw_connections = open_array!(t, truss_connections_table)?;
+    let mut connections = Vec::with_capacity(raw_connections.len());
+
+    for raw_connection in raw_connections {
+        let raw = open_array!(raw_connection, truss_connections_inner)?;
+        match raw.len() {
+            0 => continue,
+            2 => {},
+            _ => return Err(ConversionError::IncorrectLength(
+                format!("Internal member declared with incorrect length, should be 2, but saw {raw:?}")
+            )),
+        };
+
+        let (name1, id1) = open_name!(&raw[0])?;
+        let (name2, id2) = open_name!(&raw[1])?;
+        // sorting is technically not completely necessary bc concatenating IDs is the same for the
+        // same two IDs, but it's better to be consistent ig
+        match name1.cmp(name2) {
+            Ordering::Greater => connections.push((id1, id2)),
+            Ordering::Equal => {todo!("Should 0 length members be an error, warning, or ignored")},
+            Ordering::Less => connections.push((id2, id1)),
+        }
+        let member_id = id1.concatenate(id2);
+        let member_name = match name1.cmp(name2) {
+            Ordering::Greater => format!("Member {name1}<->{name2}"),
+            Ordering::Less => format!("Member {name2}<->{name1}"),
+            Ordering::Equal => unreachable!(),
+        };
+        if names.insert(member_id, member_name).is_some() {
+            return Err(ConversionError::ConflictingDefinitions(
+                format!("Member with points {name1} & {name2} has been declared more than once!")
+            ));
+        }
+    }
+    Ok(connections)
+}
+
+type LoadsResult = Result<HashMap<SolverID, AppliedLoad>, ConversionError>;
+fn into_loads(t: &Value, names: &mut HashMap<SolverID, String>) -> LoadsResult {
+    let raw_loads = open_array!(t, applied_loads_outer)?;
+    let mut loads = HashMap::with_capacity(raw_loads.len());
+    let mut counter = 1;
+
+    for raw_load in raw_loads {
+        let raw_load = open_array!(raw_load, applied_loads_inner)?;
+        match raw_load.len() {
+            0 => continue,
+            3 | 4 => {},
+            _ => return Err(ConversionError::IncorrectLength(
+                format!("applied loads must have 3 or 4 items defined, {:?} does not", raw_load[0])
+            )),
+        }
+        let (p_name, _) = open_name!(&raw_load[0], get_name_applied_load)?;
+        let l_name = format!("Load {counter} at {p_name}");
+        let l_id = SolverID::new(&l_name);
+        counter += 1;
+
+        // indexing here is safe bc guaranteed that len is 3 or 4
+        let magnitude = match &raw_load[1] {
+            Value::Float(f) => VectorComponent::KnownExactly(*f),
+            Value::Integer(i) => VectorComponent::KnownExactly(*i as f64),
+            _a => return Err(ConversionError::InvalidFormat(
+                format!("applied loads must have a known magnitude, load {l_name} has {_a:?}")
+            )),
+        };
+
+        const ACCEPTABLE: [&str; 5] = ["Up", "Down", "Left", "Right", "Polar"];
+        if raw_load[2].as_str().is_none() || !ACCEPTABLE.contains(&raw_load[2].as_str().unwrap()) {
+            return Err(ConversionError::InvalidFormat(
+                format!("applied loads must have a direction of {ACCEPTABLE:?}, but {l_name} has {:?}", raw_load[2])
+            ));
+        }
+        let dir = match raw_load[2].as_str().unwrap() {
+            "Up" => Direction2D::up(),
+            "Down" => Direction2D::down(),
+            "Left" => Direction2D::left(),
+            "Right" => Direction2D::right(),
+            "Polar" => {
+                let e = ConversionError::InvalidFormat(
+                    format!("polar directions must specify an angle, saw {:?} for {l_name}", raw_load.get(3))
+                );
+                let v = raw_load.get(3).ok_or(e.clone())?;
+                match v {
+                    Value::Integer(i) => Direction2D::from_degrees(*i as f64),
+                    Value::Float(f) => Direction2D::from_degrees(*f),
+                    _ => return Err(e),
+                }
+            },
+            _ => unreachable!(),
+        };
+        if names.insert(l_id, l_name).is_some() {
+            todo!()
+        }
+        loads.insert(l_id, AppliedLoad {
+            id: l_id,
+            at: SolverID::new(p_name),
+            dir,
+            mag: magnitude
+        });
+    }
+
+    Ok(loads)
+}
+
+type SupportsResult = Result<HashMap<SolverID, Support>, ConversionError>;
+fn into_supports(t: &Value, names: &mut HashMap<SolverID, String>) -> SupportsResult {
+    let raw_supports = open_array!(t, supports_table_outer)?;
+    let mut supports = HashMap::with_capacity(raw_supports.len());
+
+    let mut roller_count = 1;
+    let mut pin_count = 1;
+
+    for raw_support in raw_supports {
+        let raw_support = open_array!(raw_support, supports_inner)?;
+        match raw_support.len() {
+            0 => continue,
+            2 | 3 => {},
+            _ => return Err(ConversionError::IncorrectLength(
+                format!("Support at {} should have length 2 or 3", &raw_support[0])
+            ))
+        }
+        let (p_name, p_id) = open_name!(&raw_support[0], support_item_inner)?;
+        match raw_support[1].as_str() {
+            Some("Pin") => {
+                let s_name = format!("Pin {pin_count} at {p_name}");
+                supports.insert(SolverID::new(&s_name), Support::Pin {at: p_id});
+                names.insert(SolverID::new(&s_name), s_name); // multiple supports @ same point are allowed
+                pin_count += 1;
+            },
+            Some("Roller") => {
+                let s_name = format!("Roller {roller_count} at {p_name}");
+                let dir = match raw_support.get(2) {
+                    Some(Value::String(s)) if s.as_str() == "Up" => Direction2D::up(),
+                    Some(Value::String(s)) if s.as_str() == "Down" => Direction2D::down(),
+                    Some(Value::String(s)) if s.as_str() == "Left" => Direction2D::left(),
+                    Some(Value::String(s)) if s.as_str() == "Right" => Direction2D::right(),
+                    _a => return Err(ConversionError::InvalidFormat(
+                        format!("Roller direction must be Up, Down, Left, Right; {s_name} has {_a:?}")
+                    )),
+                };
+                supports.insert(SolverID::new(&s_name), Support::Roller {at: p_id, dir});
+                names.insert(SolverID::new(&s_name), s_name);
+                roller_count += 1;
+            },
+            _a => return Err(ConversionError::InvalidFormat(
+                format!("Support at {p_name} must be either Pin or Roller, not {_a:?}")
+            )),
+        };
+    }
+
+    Ok(supports)
+}
