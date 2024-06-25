@@ -9,7 +9,7 @@ use nalgebra as na;
 
 use crate::parsing::DebugInfo;
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
 pub struct SolverID(u64);
 impl PartialOrd for SolverID {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {

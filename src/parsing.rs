@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt::Formatter;
 use std::io::Write;
 use itertools::Itertools;
@@ -550,3 +550,146 @@ fn validate_points(points: &BTreeMap<SolverID, Point2D>) -> Result<(), PointVali
     
     Ok(())
 }
+
+
+/* ---- Experiments Below Here! -----*/
+enum Support {}
+
+struct Truss2D {
+    points: HashMap<SolverID, Point2D>,
+    connections: Vec<(SolverID, SolverID)>,
+    loads: HashMap<SolverID, Force2D>,
+    supports: HashMap<SolverID, Support>,
+}
+
+/// Attempts to turn a toml::Value into a toml::Value::Array,
+/// returns a Result<Array, ConversionError>
+macro_rules! open_array {
+    ($value: expr, $spot: ident) => {
+        match $value {
+            Value::Array(a) => Ok(a),
+            _a => {
+                let message = format!("Items must be declared as a table, not {_a:?}; at: ")
+                    + stringify!($spot);
+                Err(ConversionError::NotATable(message))
+            }
+        }
+    };
+    ($value: expr) => {
+        match $value {
+            Value::Array(a) => Ok(a),
+            _a => {
+                let message = format!("Items must be declared as a table, not {_a:?}");
+                Err(ConversionError::NotATable(message))
+            },
+        }
+    };
+}
+macro_rules! open_name {
+    ($value: expr, $place: ident) => {
+        match $value {
+            Value::String(s) => Ok((s.as_str(), SolverID::new(s.as_str()))),
+            _a => {
+                let message = format!("Expected string/name, but saw {_a:?}; at: ")
+                    + stringify!($place);
+                Err(ConversionError::InvalidFormat(message))
+            },
+        }
+    };
+    ($value: expr) => {
+        match $value {
+            Value::String(s) => Ok((s.as_str(), SolverID::new(s.as_str()))),
+            _a => {
+                let message = format!("Expected string/name, but saw {_a:?}");
+                Err(ConversionError::InvalidFormat(message))
+            },
+        }
+    };
+}
+
+#[derive(Clone, Debug)]
+enum ConversionError {
+    NotATable(String),
+    IncorrectLength(String),
+    InvalidFormat(String),
+    ConflictingDefinitions(String),
+}
+impl std::fmt::Display for ConversionError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        use ConversionError as CE;
+        match self {
+            CE::NotATable(_) => write!(f, "Did not get a toml table where expected: ")?,
+            CE::IncorrectLength(_) => write!(f, "Declared item has the wrong length:")?,
+            CE::InvalidFormat(_) => write!(f, "An item was declared with the wrong values or format:")?,
+            CE::ConflictingDefinitions(_) => write!(f, "Conflicting definitions were found for an item:")?,
+        }
+        let message = match self {
+            CE::NotATable(s) => s.as_str(),
+            CE::IncorrectLength(s) => s.as_str(),
+            CE::InvalidFormat(s) => s.as_str(),
+            CE::ConflictingDefinitions(s) => s.as_str(),
+        };
+        write!(f, "{message}")
+    }
+}
+
+/// Result from attempted to parse a toml table into points.
+///
+/// Result<HashMap<SolverID, Point2D>, ConversionError>
+type PointsResult = Result<HashMap<SolverID, Point2D>, ConversionError>;
+/// Attempt to convert the given [toml::Value] into [Point2D]s, may fail with a
+/// [ConversionError] that contains more details. Any returned parsing errors are likely not
+/// recoverable, as they require modification to the input file.
+fn into_points(t: &Value, names: &mut HashMap<SolverID, String>) -> PointsResult {
+    let table = open_array!(t, points_array)?;
+    let mut points = HashMap::with_capacity(table.len());
+
+    for raw_point in table {
+        let raw_point = open_array!(raw_point, point_specific)?;
+        match raw_point.len() {
+            0 => continue,
+            2..=4 => {}, // Handle later
+            _ => return Err(
+                ConversionError::IncorrectLength(format!(
+                    "Point {:?} declared with the wrong number of items! Must be 2 (for the origin) or 4 (otherwise)",
+                    raw_point.get(0).unwrap() // allowed bc zero length items are ignored
+                ))
+            ),
+        };
+        let (name, id) = open_name!(&raw_point[0], point_name_inner)?;
+        if names.insert(id, name.to_string()).is_some() {
+            return Err(ConversionError::ConflictingDefinitions(
+                format!("point {name} has been declared twice! Use \'#\' to ignore it!")
+            ));
+        };
+        if raw_point.len() == 2 {
+            if Some("Origin") != (&raw_point[1]).as_str() {
+                let m = format!("point {name} has 2 items, but is declared with {:?} instead of Origin", &raw_point[1]);
+                return Err(ConversionError::InvalidFormat(m));
+            }
+            points.insert(id, Point2D::origin(id));
+            continue;
+        }
+
+        // the indexing here won't panic bc we've checked the len must be [0, 2, 4] & we've already
+        // handled the 0 and 2 cases (so it must be 4)
+        let (v1, v2) = match (&raw_point[2], &raw_point[3]) {
+            (Value::Integer(i1), Value::Integer(i2)) => (*i1 as f64, *i2 as f64),
+            (Value::Float(f1), Value::Float(f2)) => (*f1, *f2),
+            (Value::Integer(i1), Value::Float(f1)) => (*i1 as f64, *f1),
+            (Value::Float(f1), Value::Integer(i1)) => (*f1, *i1 as f64),
+            _ => return Err(ConversionError::InvalidFormat(
+                format!("Point {name} must have 2 numbers for position, saw {:?} and {:?}", &raw_point[2], &raw_point[3])
+            )),
+        };
+        let p = match &raw_point[1] {
+            Value::String(s) if s.as_str() == "Cartesian" => Point2D::cartesian(id, v1, v2),
+            Value::String(s) if s.as_str() == "Polar" => Point2D::polar(id, v1, v2),
+            _ => return Err(ConversionError::InvalidFormat(format!("Point {name} must be Cartesian, Polar, or Origin"))),
+        };
+        points.insert(id, p);
+    }
+    Ok(points)
+}
+
+// TODO: next up: internal forces from toml tables :D
