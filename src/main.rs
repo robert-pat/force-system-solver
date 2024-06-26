@@ -1,4 +1,7 @@
-use crate::parsing::ParsingError;
+use std::collections::HashSet;
+use std::path::Path;
+use crate::parsing::{ParsingError, TrussCreationError};
+use crate::solver::SolvingError;
 
 mod parsing;
 mod solver;
@@ -6,34 +9,39 @@ mod tests;
 #[path = r"graphics\display.rs"]
 mod display;
 
-/// Statics problem solver! Solving 2D Trusses in Static Equilibrium
-fn main() {
-    // ---- Experimental Changes -----
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
+enum CommandFlags {
+    NewParser,
+    UseExample,
+    UseRenderer,
+}
+fn main () {
+    let mut flags: HashSet<CommandFlags> = HashSet::new();
     if std::env::args().any(|a| a.as_str() == "-n") {
-        use CommandLineProgramError as CLPE;
-        match use_new_parser(ask_user_for_path()) {
-            Err(CLPE::Solving(_e)) => {
-                eprintln!("Error in the solver:");
-                panic!("{_e:?}");
-            },
-            Err(CLPE::Parsing(_e)) => {
-                eprintln!("Error parsing file from toml:");
-                panic!("{_e:?}");
-            },
-            Err(CLPE::FileIO(_e)) => {
-                eprintln!("Error with FileIO:");
-                panic!("{_e}");
-            },
-            Err(CLPE::Conversion(_e)) => {
-                eprintln!("Error converting to Truss");
-                panic!("{_e}");
-            },
-            Ok(_) => {},
-        };
+        flags.insert(CommandFlags::NewParser);
+    }
+    if std::env::args().any(|a| a.as_str() == "-g") {
+        flags.insert(CommandFlags::UseRenderer);
+        eprintln!("Renderer is currently not implemented!");
+        return;
+    }
+    if std::env::args().any(|a| a.as_str() == "-e") {
+        flags.insert(CommandFlags::UseExample);
+        eprintln!("Examples automatically run with the new parser.");
+        main_new_parser(Some(String::new()));
         return;
     }
 
+    if flags.contains(&CommandFlags::NewParser) {
+        let mut path = std::env::args().skip(1).filter(|a| Path::new(a).exists());
+        main_new_parser(path.next());
+        return;
+    }
+    legacy_parser();
+}
 
+/// Statics problem solver! Solving 2D Trusses in Static Equilibrium
+fn legacy_parser() {
     // get the file we need, skip the program name (first arg)
     let file_path = std::env::args().nth(2).unwrap_or_else(ask_user_for_path);
     let file = match std::fs::read_to_string(&file_path) {
@@ -42,17 +50,17 @@ fn main() {
     };
 
     // startup messages
-    let mut info = parsing::get_problem_information(&file);
+    let table = file.parse::<toml::Table>().unwrap();
+    let mut info = parsing::get_problem_information(&table);
     println!("..........");
-    println!("Statics Problem Solver | Solving the problem at \'{file_path}\'");
-    println!("Working on problem: {}!", info.name);
+    println!("Statics Problem Solver | Solving {} at \'{file_path}\'", info.name);
     if info.debug.enabled {
         eprintln!("------------");
         eprintln!("Debug info enabled! The parser & solver will spit out a lot of text!");
         eprintln!("------------");
     }
     if info.file_write {
-        eprintln!("File writing is enabled! Output (debug & results) will be printed to \'answer-{}\'.txt", info.name);
+        eprintln!("File writing is enabled! Output (debug & results) will be printed to \'answer-{}.txt\'", info.name);
     }
 
     let (joints, names) = match parsing::parse_problem(file, &mut info.debug) {
@@ -76,12 +84,12 @@ fn main() {
     if info.debug.enabled {
         writeln!(info.debug.output, "Name Conversion:").unwrap();
         for (id, name) in names.iter() {
-            writeln!(info.debug.output, "Id {} is \'{}\'", id, name).unwrap();
+            writeln!(info.debug.output, "Id {id} is \'{name}\'").unwrap();
         }
 
         writeln!(info.debug.output, "Joints:").unwrap();
         for joint in &joints {
-            writeln!(info.debug.output, "{}", joint).unwrap(); // lists the forces acting at the joint
+            writeln!(info.debug.output, "{joint}").unwrap(); // lists the forces acting at the joint
         }
     }
 
@@ -115,73 +123,95 @@ fn main() {
 /// Prompts the user to type in a path to a problem.
 /// This path is relative to the executable & will trim whitespace.
 ///
-/// If no path is specified, a default one will be used instead.
+/// If no path is specified, the default one will be used instead.
 fn ask_user_for_path() -> String {
-    println!("Please enter a file path to the problem you would like solved.");
-    println!("This path should be relative to the current directory:");
+    println!("Please enter a file path to the problem you would like solved;");
+    println!("this path should be relative to the current directory.");
     let mut s = String::new();
     std::io::stdin()
         .read_line(&mut s)
-        .expect("Failed to read std in! Programming Issue.");
+        .expect("Could not read input (from stdin), this is likely a program error");
 
-    // if any of the characters are not whitespace, that's a path, otherwise default
-    if !s.chars().any(|c| !c.is_ascii_whitespace()) {
-        eprintln!("Entered file path is empty, using a sample problem!");
-        eprintln!("Expecting the sample problem: \'sample-problems\\problem-one.toml\'");
-        eprintln!();
-        return String::from("sample-problems\\problem-one.toml");
-    }
     s.trim().to_string() // I know, I know
 }
 
-enum CommandLineProgramError {
-    Conversion(parsing::TrussCreationError),
-    Solving(solver::SolvingError),
-    FileIO(String),
-    Parsing(String),
+/// Run the program to use the new parser (converting to a [parsing::Truss2D] first). The outputs
+/// are equally accurate as the old parser, but formatting may slightly differ. Using the new
+/// parser also produced more information about the Truss (see Truss2D).
+fn main_new_parser(problem_path: Option<String>) {
+    let problem_path = problem_path.unwrap_or_else(ask_user_for_path);
+    if problem_path.chars().all(|c| c.is_whitespace()) {
+        eprintln!("Empty path detected! Here's a sample problem:");
+        let file_text = include_str!(r"..\sample-problems\problem-one.toml");
+        let table = match file_text.parse::<toml::Table>() {
+            Ok(t) => t,
+            Err(e) => panic!("did not find a valid toml file: {}", e),
+        };
+        run_program(&table);
+        return;
+    }
+
+    let table = {
+        let file_text = match std::fs::read_to_string(&problem_path) {
+            Ok(t) => t,
+            Err(e) => panic!("could not read the file: {}", e),
+        };
+        match file_text.parse::<toml::Table>() {
+            Ok(t) => t,
+            Err(e) => panic!("did not find a valid toml file: {}", e),
+        }
+    };
+    run_program(&table);
 }
-fn use_new_parser(p: impl AsRef<std::path::Path>) -> Result<(), CommandLineProgramError> {
-    let file = match std::fs::read_to_string(p) {
-        Ok(s) => s,
-        Err(e) => return Err(CommandLineProgramError::FileIO(e.to_string())),
-    };
-    let table = match file.parse::<toml::Table>() {
-        Ok(t) => t,
-        Err(e) => return Err(CommandLineProgramError::Parsing(e.to_string())),
-    };
+/// Uses the (already created) [toml::Table] as input for the (new) parser and solver. This function
+/// is a full 'main' for force-system-solver, i.e. it responds to debug output settings, file
+/// writing, and everything else. See [main_new_parser()] for a 'main' function that also handles
+/// everything from file path to creating the Table.
+fn run_program(table: &toml::Table) {
+    let mut p_info = parsing::get_problem_information(table);
+    let out = &mut p_info.debug;
+    writeln!(out.output, "Statics Problem Solver | Working on {}", p_info.name).ok();
+    if out.enabled {
+        eprintln!("-> Debug information is enabled; extra info will be output <-");
+    }
+    if p_info.file_write {
+        eprintln!("-> File writing is enabled! Output & answers written to answer-{}.txt <-", p_info.name);
+    }
+    #[allow(unused)] // IntelliJ can't read format strings for use
     let truss = match parsing::Truss2D::new(table) {
         Ok(t) => t,
-        Err(e) => return Err(CommandLineProgramError::Conversion(e)),
+        Err(TrussCreationError::PointNonExistent(m)) => panic!("Error: Non-existent point: {m}"),
+        Err(TrussCreationError::PointsOverlap(m)) => panic!("Error: Points can not overlap: {m}"),
+        Err(TrussCreationError::Conversion(c_e)) => panic!("Error: {c_e}"),
     };
-    let mut info = parsing::DebugInfo {
-        enabled: true,
-        output: Box::new(std::io::stderr()),
-    };
-
-    eprintln!("Names Conversion List:");
-    for (id, name) in &truss.names {
-        eprintln!("Item {id} has name: {name}");
-    }
-    eprintln!();
-
     let joints = truss.condense();
-    eprintln!("Joints build from truss:");
-    for j in &joints {
-        eprintln!("{j}");
-    }
-    eprintln!();
 
-    let solutions = match solver::solve_truss(&joints, &mut info) {
-        Ok(v) => v,
-        Err(e) => return Err(CommandLineProgramError::Solving(e)),
-    };
-    eprintln!();
-    for solution in solutions {
-        let name = match truss.names.get(&solution.force) {
-            Some(n) => n.as_str(),
-            None => "no name found"
-        };
-        eprintln!("Item {name} ({}) has value {:.8}", solution.force, solution.value);
+    if out.enabled {
+        let out_type = std::any::type_name_of_val(&*out.output);
+        if out.display_names(truss.names.iter()).is_err() {
+            eprintln!("Warning: issue writing name information to {out_type:?}");
+        }
+        if out.display_joints(&joints).is_err() {
+            eprintln!("Warning: issue writing name information to {out_type:?}");
+        }
     }
-    Ok(())
+
+    let solutions = match solver::solve_truss(&joints, out) {
+        Ok(r) => r,
+        Err(SolvingError::NoMatrixWorked) =>  panic!("No invertible matrix found for this problem"),
+    };
+    for res in solutions {
+        let name = match truss.names.get(&res.force) {
+            Some(n) => n.as_str(),
+            None => "no name found",
+        };
+        let state = if res.value > 0f64 { "T" } else { "C" };
+        let id = res.force;
+
+        match out.enabled {
+            true => writeln!(out.output, "{name} [{id}]: {} ({state})", res.force),
+            false => writeln!(out.output, "{name}: {} ({state})", res.force),
+        }.ok();
+    }
+    writeln!(out.output, "Solving complete. Exiting.").ok();
 }

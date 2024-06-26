@@ -16,8 +16,8 @@ pub(crate) struct ProblemInformation {
     pub(crate) file_write: bool,
 }
 /// Grabs important settings information from a TOML file. This function will not error.
-pub(crate) fn get_problem_information(problem: &str) -> ProblemInformation {
-    let table = problem.parse::<Table>().unwrap();
+pub(crate) fn get_problem_information(problem: &Table) -> ProblemInformation {
+    let table = problem;
     let name = match table.get("name") {
         Some(Value::String(s)) => s.clone(),
         Some(_) => String::from("(Invalid name--not text)"),
@@ -38,7 +38,7 @@ pub(crate) fn get_problem_information(problem: &str) -> ProblemInformation {
             .write(true)
             .create(true)
             .open(format!("answer-{}", name))
-            .unwrap();
+            .expect("Unable to open new file to write output to");
         Box::new(file)
     } else {
         Box::new(std::io::stdout())
@@ -66,6 +66,13 @@ impl DebugInfo {
             output: Box::new(EmptyWriter()),
         }
     }
+    #[allow(unused)]
+    pub(crate) fn stderr(enabled: bool) -> Self {
+        DebugInfo {
+            enabled,
+            output: Box::new(std::io::stderr()),
+        }
+    }
     /// Display the given matrix, limited to whatever the solver::solve_truss() generates.
     ///
     /// Will print the name and then each row of the matrix in order. The size of the matrix (rows
@@ -86,6 +93,23 @@ impl DebugInfo {
             }
             writeln!(self.output, "]");
         }
+    }
+    pub(crate) fn display_joints(&mut self, joints: &[TrussJoint2D]) -> Result<(), ()> {
+        writeln!(self.output, "Created Joints:").map_err(|_| ())?;
+        for joint in joints  {
+            writeln!(self.output, "{joint}").map_err(|_| ())?
+        }
+        writeln!(self.output).map_err(|_| ())
+    }
+    pub(crate) fn display_names<'a>(
+        &mut self,
+        names: impl Iterator<Item = (&'a SolverID, &'a String)>
+    ) -> Result<(), ()> {
+        writeln!(self.output, "Names for solver items:").map_err(|_| ())?;
+        for (id, name) in names {
+            writeln!(self.output, "Item {id} is {name}").map_err(|_| ())?;
+        }
+        writeln!(self.output).map_err(|_| ())
     }
 }
 #[allow(dead_code)]
@@ -628,7 +652,7 @@ impl Truss2D {
     /// Try to turn the given [Table] into a [Truss2D]. The function will error on the first issue
     /// it encounters; the returned [TrussCreationError] has a message with details about what the
     /// problem was. Note empty definitions are ignored while duplicate ones are errors.
-    pub(crate) fn new(t: Table) -> Result<Self, TrussCreationError> {
+    pub(crate) fn new(t: &Table) -> Result<Self, TrussCreationError> {
         let mut names: HashMap<SolverID, String> = HashMap::new();
 
         let points = into_points(open_table!(&t, "points")?, &mut names)?;
