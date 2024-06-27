@@ -1,3 +1,13 @@
+# IDE configs
 /target
 /.idea
+
+
+# Sample problems from the textbook
 sample-problems/txtbk-6-3.toml
+sample-problems/textbk-6-3.toml
+sample-problems/txtbk-hw-6-1.toml
+sample-problems/txtbk-hw-6-18.toml
+
+# Compiled shader files
+*.spv

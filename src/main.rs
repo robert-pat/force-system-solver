@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 use std::path::Path;
-use crate::parsing::{ParsingError, TrussCreationError};
+use crate::parsing::{ParsingError, Truss2D, TrussCreationError};
 use crate::solver::SolvingError;
 
 mod parsing;
@@ -22,7 +22,7 @@ fn main () {
     }
     if std::env::args().any(|a| a.as_str() == "-g") {
         flags.insert(CommandFlags::UseRenderer);
-        eprintln!("Renderer is currently not implemented!");
+        display::init(Truss2D::default());
         return;
     }
     if std::env::args().any(|a| a.as_str() == "-e") {
@@ -135,7 +135,7 @@ fn ask_user_for_path() -> String {
     s.trim().to_string() // I know, I know
 }
 
-/// Run the program to use the new parser (converting to a [parsing::Truss2D] first). The outputs
+/// Run the program to use the new parser (converting to a [Truss2D] first). The outputs
 /// are equally accurate as the old parser, but formatting may slightly differ. Using the new
 /// parser also produced more information about the Truss (see Truss2D).
 fn main_new_parser(problem_path: Option<String>) {
@@ -178,7 +178,7 @@ fn run_program(table: &toml::Table) {
         eprintln!("-> File writing is enabled! Output & answers written to answer-{}.txt <-", p_info.name);
     }
     #[allow(unused)] // IntelliJ can't read format strings for use
-    let truss = match parsing::Truss2D::new(table) {
+    let truss = match Truss2D::new(table) {
         Ok(t) => t,
         Err(TrussCreationError::PointNonExistent(m)) => panic!("Error: Non-existent point: {m}"),
         Err(TrussCreationError::PointsOverlap(m)) => panic!("Error: Points can not overlap: {m}"),

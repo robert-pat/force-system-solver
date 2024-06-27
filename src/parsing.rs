@@ -590,6 +590,7 @@ macro_rules! open_table {
 }
 /// An external support at a joint in the truss; support reactions with known directions, but
 /// unknown magnitudes. It may be a pin support or a roller.
+#[derive(Clone, Debug)]
 enum Support {
     Pin{at: SolverID},
     Roller{at: SolverID, dir: Direction2D},
@@ -603,7 +604,8 @@ impl Support {
     }
 }
 /// An external load applied to the truss at a specific point. These forces have both known 
-/// directions and a known magnitude. 
+/// directions and a known magnitude.
+#[derive(Clone, Copy, Debug)]
 struct AppliedLoad {
     id: SolverID,
     at: SolverID,
@@ -619,6 +621,7 @@ struct AppliedLoad {
 /// This struct holds all of the necessary information to display and solve a truss and 
 /// human-friendly names for each relevant truss component. It is guaranteed to be valid, with 
 /// all truss members, supports, and applied loads acting only at valid joints.
+#[derive(Clone, Debug, Default)]
 pub(crate) struct Truss2D {
     points: HashMap<SolverID, Point2D>,
     connections: Vec<(SolverID, SolverID)>,
@@ -629,6 +632,7 @@ pub(crate) struct Truss2D {
 /// An error encountered in the process of creating a new [Truss2D]. Can contain either 
 /// [ConversionError]s from unwrapping values from a toml file, or issues found when validating the
 /// truss.
+#[derive(Debug, Clone)]
 pub(crate) enum TrussCreationError {
     Conversion(ConversionError),
     PointNonExistent(String),
