@@ -54,7 +54,7 @@ impl ApplicationHandler for Program {
                 if !event_loop.exiting() && !self.minimized {
                     let app = self.drawing.as_mut().unwrap();
                     let window = self.window.as_ref().unwrap();
-                    app.render(window).ok(); // TODO: add vertex data eventually
+                    app.render(window, &self.truss);
                 }
             },
             WindowEvent::CloseRequested => {
