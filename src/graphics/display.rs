@@ -71,12 +71,15 @@ impl ApplicationHandler for Program {
             }
             // shiv for keyboard stuff
             WindowEvent::KeyboardInput {event,..} => {
-                if event.logical_key == Key::Named(NamedKey::Tab) && event.state == ElementState::Pressed {
-                    if self.drawing.is_none() {return;}
-                    self.drawing.as_mut().unwrap().change_something_shiv();
-                    if self.window.is_some() {
-                        self.window.as_ref().unwrap().request_redraw();
-                    }
+                if event.state == ElementState::Released || self.drawing.is_none() {
+                    return;
+                }
+                match event.logical_key {
+                    Key::Named(NamedKey::Tab) => self.drawing.as_mut().unwrap().change_something_shiv(),
+                    _ => return,
+                }
+                if self.window.is_some() {
+                    self.window.as_ref().unwrap().request_redraw();
                 }
             }
             _ => {},

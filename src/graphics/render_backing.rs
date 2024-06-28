@@ -13,7 +13,9 @@
 
 use std::collections::HashSet;
 use std::ffi::c_void;
-use cgmath::{vec3};
+use std::fmt::Formatter;
+use cgmath::{Rotation, vec3};
+use cgmath::num_traits::float::FloatCore;
 use vulkanalia::loader::{LibloadingLoader, LIBRARY};
 use vulkanalia::prelude::v1_0::*;
 use vulkanalia::vk::{KhrSurfaceExtension, PhysicalDevice, SwapchainKHR};
@@ -32,7 +34,7 @@ pub(super) struct VulkanApp {
     resized: bool,
 
     mem_mapped_vertices: Option<(*mut c_void, NumBytes)>,
-    old_vertices: [Vertex; MAX_VERTICES],
+    vertices: [Vertex; MAX_VERTICES],
 }
 impl VulkanApp {
     /// Create a new VulkanApp w/ all of the backing needed. This function will panic if any issue
@@ -82,7 +84,7 @@ impl VulkanApp {
             resized: false,
 
             mem_mapped_vertices: None,
-            old_vertices: VERTICES,
+            vertices: VERTICES,
         }
     }
     pub(super) fn render(&mut self, window: &Window) {
@@ -156,9 +158,7 @@ impl VulkanApp {
         }
         self.frame = (self.frame + 1) % MAX_FRAMES_IN_FLIGHT;
     }
-    pub(super) fn update_truss(&mut self, _t: &Truss2D) {
-
-    }
+    pub(super) fn update_truss(&mut self, _t: &Truss2D) {}
     pub(super) fn change_something_shiv(&mut self) {
         if self.mem_mapped_vertices.is_none() {
             eprintln!("Mapping memory");
@@ -168,9 +168,9 @@ impl VulkanApp {
             }
         }
         let vertices: [Vertex; 3] = [
-            self.old_vertices[0].tick_color(),
-            self.old_vertices[1].tick_color(),
-            self.old_vertices[2].tick_color(),
+            self.vertices[0].tweak(),
+            self.vertices[1].tweak(),
+            self.vertices[2].tweak(),
         ];
         let (pointer, size) = self.mem_mapped_vertices.unwrap();
         assert_eq!(std::mem::size_of_val(&vertices), size);
@@ -179,8 +179,11 @@ impl VulkanApp {
             let pointer = pointer as *mut Vertex;
             std::ptr::copy_nonoverlapping(vertices.as_ptr(), pointer, vertices.len());
         }
-        eprintln!("Changed Vertex data from {:?} to {:?}", self.old_vertices, vertices);
-        self.old_vertices = vertices;
+        for (i, v) in self.vertices.iter().enumerate() {
+            eprintln!("Vertex {i} {} -> {}", self.vertices[i], v);
+        }
+        eprintln!();
+        self.vertices = vertices;
     }
     unsafe fn recreate_swapchain(&mut self, window: &Window) {
         self.device.device_wait_idle().unwrap();
@@ -381,19 +384,26 @@ impl Vertex {
             .build();
         [pos, color]
     }
-    fn tick_color(&self) -> Vertex {
+    fn tweak(&self) -> Vertex {
         let old = self.color;
         let new = vec3(
-            (old.x + 0.1) % 1.0,
-            (old.y + 0.1) % 1.0,
-            (old.z + 0.1) % 1.0,
+            (old.x + 0.27) % 1.0,
+            (old.y + 0.27) % 1.0,
+            (old.z + 0.27) % 1.0,
         );
-        Vertex::new(self.pos, new)
+        let rotate: cgmath::Basis2<f32> = cgmath::Rotation2::from_angle(cgmath::Rad(30.0.to_radians()));
+        let n_pos = rotate.rotate_vector(self.pos);
+        Vertex::new(n_pos, new)
     }
 }
 impl Default for Vertex {
     fn default() -> Self {
         Vertex::from_arr([0f32; 2], [0f32; 3])
+    }
+}
+impl std::fmt::Display for Vertex {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "<[{}, {}], [{}, {}, {}]>", self.pos.x, self.pos.y, self.color.x, self.color.y, self.color.z)
     }
 }
 
@@ -402,9 +412,9 @@ type NumVertex = usize;
 const MAX_FRAMES_IN_FLIGHT: usize = 2;
 const MAX_VERTICES: usize = 3;
 const VERTICES: [Vertex; MAX_VERTICES] = [
-    Vertex::new(cgmath::vec2(0.0, -0.5), vec3(1.0, 0.0, 0.0)),
-    Vertex::new(cgmath::vec2(0.5, 0.5), vec3(0.0, 1.0, 0.0)),
-    Vertex::new(cgmath::vec2(-0.5, 0.5), vec3(0.0, 0.0, 1.0)),
+    Vertex::new(cgmath::vec2(0.0, -0.5), vec3(0.96, 0.0, 0.0)),
+    Vertex::new(cgmath::vec2(0.5, 0.5), vec3(0.0, 0.96, 0.0)),
+    Vertex::new(cgmath::vec2(-0.5, 0.5), vec3(0.0, 0.0, 0.96)),
 ];
 
 /* Working with vertices */
@@ -1002,14 +1012,17 @@ fn create_shader_module(device: &Device, bytes: &[u8]) -> Result<vk::ShaderModul
     }
 }
 
+pub(super) struct VertexDataContext<'a> {
+    pub(super) truss: &'a Truss2D,
+}
 /* Functions for higher-level rendering */
 use parsing::Truss2D;
 /// Convert a [Truss2D] into a vertex data & write it into the provided slice. This function will
 /// not write more than max_size vertices into the buffer. If something goes wrong, the function
 /// will return an error and nothing will be written to the provided slice. If max_size is larger
 /// than buffer.len(), the function will immediately return.
-fn build_vertex_data(_t: &Truss2D, buffer: &mut [Vertex], max_size: NumVertex) -> Result<NumVertex, ()> {
-    if buffer.len() <= max_size || max_size == 0 {
+fn build_vertex_data(ctx: VertexDataContext, buffer: &mut [Vertex], max: NumVertex) -> Result<NumVertex, ()> {
+    if buffer.len() < max || max == 0 {
         return Err(());
     }
     todo!()
