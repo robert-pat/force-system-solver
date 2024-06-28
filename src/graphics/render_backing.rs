@@ -5,13 +5,15 @@
  * the structs are just handles to the actual resources created by the driver. Technically, this
  * makes doing anything with anything unsafe, but I don't know of a way to fix that (aside from
  * validating everything before calling it, which the vulkanalina crate doesn't support beyond
- * null checks. Instead, I'm just going to panic wherever possible & hope windows will clean
+ * null checks). Instead, I'm just going to panic wherever possible & hope windows will clean
  * everything up. I don't really know what else to do.
  *
  * Maybe at some point, I'll come back and actually handle any of the Vulkan error codes
  */
 
 use std::collections::HashSet;
+use std::ffi::c_void;
+use cgmath::{vec3};
 use vulkanalia::loader::{LibloadingLoader, LIBRARY};
 use vulkanalia::prelude::v1_0::*;
 use vulkanalia::vk::{KhrSurfaceExtension, PhysicalDevice, SwapchainKHR};
@@ -28,6 +30,9 @@ pub(super) struct VulkanApp {
     data: AppData,
     frame: usize,
     resized: bool,
+
+    mem_mapped_vertices: Option<(*mut c_void, NumBytes)>,
+    old_vertices: [Vertex; MAX_VERTICES],
 }
 impl VulkanApp {
     /// Create a new VulkanApp w/ all of the backing needed. This function will panic if any issue
@@ -75,9 +80,12 @@ impl VulkanApp {
             data,
             frame: 0,
             resized: false,
+
+            mem_mapped_vertices: None,
+            old_vertices: VERTICES,
         }
     }
-    pub(super) fn render(&mut self, window: &Window, _t: &parsing::Truss2D) {
+    pub(super) fn render(&mut self, window: &Window) {
         // Steps: 1) Get image, 2) Run the command buffer for that image, 3) put the image on the
         // swapchain to be displayed
         // We have the fences & semaphores to not double submit work & keep things synced
@@ -148,6 +156,32 @@ impl VulkanApp {
         }
         self.frame = (self.frame + 1) % MAX_FRAMES_IN_FLIGHT;
     }
+    pub(super) fn update_truss(&mut self, _t: &Truss2D) {
+
+    }
+    pub(super) fn change_something_shiv(&mut self) {
+        if self.mem_mapped_vertices.is_none() {
+            eprintln!("Mapping memory");
+            unsafe {
+                let mem_info = map_memory(&self.device, &self.data);
+                self.mem_mapped_vertices = Some(mem_info);
+            }
+        }
+        let vertices: [Vertex; 3] = [
+            self.old_vertices[0].tick_color(),
+            self.old_vertices[1].tick_color(),
+            self.old_vertices[2].tick_color(),
+        ];
+        let (pointer, size) = self.mem_mapped_vertices.unwrap();
+        assert_eq!(std::mem::size_of_val(&vertices), size);
+
+        unsafe {
+            let pointer = pointer as *mut Vertex;
+            std::ptr::copy_nonoverlapping(vertices.as_ptr(), pointer, vertices.len());
+        }
+        eprintln!("Changed Vertex data from {:?} to {:?}", self.old_vertices, vertices);
+        self.old_vertices = vertices;
+    }
     unsafe fn recreate_swapchain(&mut self, window: &Window) {
         self.device.device_wait_idle().unwrap();
         self.destroy_swapchain();
@@ -165,6 +199,7 @@ impl VulkanApp {
     /// Safety: Once this is called, self MUST NOT be called again; i.e. this struct becomes dead.
     /// It can not render, be created, wait, resize, or do anything else
     pub(super) unsafe fn destroy(&mut self) {
+        unmap_memory(&self.device, &self.data);
         self.destroy_swapchain();
 
         self.device.destroy_buffer(self.data.vertex_buffer, None);
@@ -321,7 +356,7 @@ impl Vertex {
     const fn from_arr(pos: [f32; 2], color: [f32; 3]) -> Self {
         Self {
             pos: cgmath::vec2(pos[0], pos[1]),
-            color: cgmath::vec3(color[0], color[1], color[2]),
+            color: vec3(color[0], color[1], color[2]),
         }
     }
     fn binding_description() -> vk::VertexInputBindingDescription {
@@ -346,18 +381,36 @@ impl Vertex {
             .build();
         [pos, color]
     }
+    fn tick_color(&self) -> Vertex {
+        let old = self.color;
+        let new = vec3(
+            (old.x + 0.1) % 1.0,
+            (old.y + 0.1) % 1.0,
+            (old.z + 0.1) % 1.0,
+        );
+        Vertex::new(self.pos, new)
+    }
+}
+impl Default for Vertex {
+    fn default() -> Self {
+        Vertex::from_arr([0f32; 2], [0f32; 3])
+    }
 }
 
+type NumBytes = usize;
+type NumVertex = usize;
 const MAX_FRAMES_IN_FLIGHT: usize = 2;
-const VERTICES: [Vertex; 3] = [
-    Vertex::new(cgmath::vec2(0.0, -0.5), cgmath::vec3(1.0, 0.0, 0.0)),
-    Vertex::new(cgmath::vec2(0.5, 0.5), cgmath::vec3(0.0, 1.0, 0.0)),
-    Vertex::new(cgmath::vec2(-0.5, 0.5), cgmath::vec3(0.0, 0.0, 1.0)),
+const MAX_VERTICES: usize = 3;
+const VERTICES: [Vertex; MAX_VERTICES] = [
+    Vertex::new(cgmath::vec2(0.0, -0.5), vec3(1.0, 0.0, 0.0)),
+    Vertex::new(cgmath::vec2(0.5, 0.5), vec3(0.0, 1.0, 0.0)),
+    Vertex::new(cgmath::vec2(-0.5, 0.5), vec3(0.0, 0.0, 1.0)),
 ];
+
 /* Working with vertices */
 fn create_vertex_buffer(inst: &Instance, device: &Device, data: &mut AppData) {
     let buffer_info = vk::BufferCreateInfo::builder()
-        .size((std::mem::size_of::<Vertex>() * VERTICES.len()) as u64)
+        .size((std::mem::size_of::<Vertex>() * MAX_VERTICES) as u64)
         .usage(vk::BufferUsageFlags::VERTEX_BUFFER)
         .sharing_mode(vk::SharingMode::EXCLUSIVE)
         .flags(vk::BufferCreateFlags::empty());
@@ -402,6 +455,25 @@ fn create_vertex_buffer(inst: &Instance, device: &Device, data: &mut AppData) {
         std::ptr::copy_nonoverlapping(VERTICES.as_ptr(), memory.cast(), VERTICES.len());
         device.unmap_memory(data.vertex_buffer_memory);
     }
+}
+
+/// Maps the memory in AppData.vertex_buffer_memory to the CPU and returns the pointer to it.
+/// Safety: this pointer must not be written to after [unmap_memory] is called. No more than
+/// the returned usize bytes may be written to it.
+unsafe fn map_memory(device: &Device, data: &AppData) -> (*mut c_void, NumBytes) {
+    match device.map_memory(
+        data.vertex_buffer_memory,
+        0,
+        (std::mem::size_of::<Vertex>() * 3) as u64,
+        vk::MemoryMapFlags::empty(),
+    ) {
+        Ok(p) => (p, std::mem::size_of::<Vertex>() * 3),
+        Err(_e) => panic!("Couldn't map memory in shiv {_e:?}"),
+    }
+}
+/// Unmaps the given data.vertex_buffer_memory from the CPU. Once this function is called,
+unsafe fn unmap_memory(device: &Device, data: &AppData) {
+    device.unmap_memory(data.vertex_buffer_memory);
 }
 
 const VALIDATION_LAYER: vk::ExtensionName = vk::ExtensionName::from_bytes(b"VK_LAYER_KHRONOS_validation");
@@ -466,15 +538,13 @@ fn create_swapchain(window: &Window, inst: &Instance, device: &Device, data: &mu
     // settings for our swapchain; we can change to PresentModeKHR::MAILBOX for better perf at high
     // frame rates, but I don't think its necessary
     let surface_format = support.formats.iter()
-        .filter(|f| f.format == vk::Format::B8G8R8A8_SRGB && f.color_space == vk::ColorSpaceKHR::SRGB_NONLINEAR)
-        .next()
+        .find(|f| f.format == vk::Format::B8G8R8A8_SRGB && f.color_space == vk::ColorSpaceKHR::SRGB_NONLINEAR)
         .unwrap_or_else(|| {
             eprintln!("No ideal surface format found, using the first available!");
             &support.formats[0]
         });
     let present_mode = support.present_mode.iter()
-        .filter(|p_m| **p_m == vk::PresentModeKHR::FIFO)
-        .next()
+        .find(|p_m| **p_m == vk::PresentModeKHR::FIFO)
         .unwrap_or_else(|| {
             eprintln!("No Ideal present mode found, using the first available!");
             &support.present_mode[0]
@@ -930,4 +1000,17 @@ fn create_shader_module(device: &Device, bytes: &[u8]) -> Result<vk::ShaderModul
     unsafe {
         device.create_shader_module(&info, None)
     }
+}
+
+/* Functions for higher-level rendering */
+use parsing::Truss2D;
+/// Convert a [Truss2D] into a vertex data & write it into the provided slice. This function will
+/// not write more than max_size vertices into the buffer. If something goes wrong, the function
+/// will return an error and nothing will be written to the provided slice. If max_size is larger
+/// than buffer.len(), the function will immediately return.
+fn build_vertex_data(_t: &Truss2D, buffer: &mut [Vertex], max_size: NumVertex) -> Result<NumVertex, ()> {
+    if buffer.len() <= max_size || max_size == 0 {
+        return Err(());
+    }
+    todo!()
 }

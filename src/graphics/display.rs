@@ -1,7 +1,8 @@
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
-use winit::event::{StartCause, WindowEvent};
+use winit::event::{ElementState, StartCause, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
+use winit::keyboard::{Key, NamedKey};
 use winit::window::{Window, WindowAttributes, WindowId};
 
 use crate::parsing::Truss2D;
@@ -12,6 +13,7 @@ mod render_backing;
 struct Program {
     minimized: bool,
     paused: bool,
+    // TODO: find where to update the truss data
     truss: Truss2D,
     drawing: Option<render_backing::VulkanApp>,
     window: Option<Window>,
@@ -54,7 +56,7 @@ impl ApplicationHandler for Program {
                 if !event_loop.exiting() && !self.minimized {
                     let app = self.drawing.as_mut().unwrap();
                     let window = self.window.as_ref().unwrap();
-                    app.render(window, &self.truss);
+                    app.render(window);
                 }
             },
             WindowEvent::CloseRequested => {
@@ -66,6 +68,16 @@ impl ApplicationHandler for Program {
                     return;
                 }
                 self.minimized = false;
+            }
+            // shiv for keyboard stuff
+            WindowEvent::KeyboardInput {event,..} => {
+                if event.logical_key == Key::Named(NamedKey::Tab) && event.state == ElementState::Pressed {
+                    if self.drawing.is_none() {return;}
+                    self.drawing.as_mut().unwrap().change_something_shiv();
+                    if self.window.is_some() {
+                        self.window.as_ref().unwrap().request_redraw();
+                    }
+                }
             }
             _ => {},
         }
