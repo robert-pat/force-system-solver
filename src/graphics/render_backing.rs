@@ -64,6 +64,8 @@ impl VulkanApp {
         create_pipeline(&device, &mut data);
         create_framebuffers(&device, &mut data);
 
+        create_command_pool(&instance, &device, &mut data);
+        create_vertex_buffer(&instance, &device, &mut data);
 
 
 
@@ -79,7 +81,7 @@ impl VulkanApp {
         todo!()
     }
     pub(super) fn wait_device(&self) {
-        // this one feel like maybe its not actually unsafe to call ?
+        // this one feel like maybe it's not actually unsafe to call ?
         unsafe { self.device.device_wait_idle() }.unwrap();
     }
     pub(super) fn resized(&mut self) { self.resized = true; }
@@ -187,6 +189,61 @@ impl Vertex {
             .offset(std::mem::size_of::<Vec2>() as u32)
             .build();
         [pos, color]
+    }
+}
+
+const VERTICES: [Vertex; 3] = [
+    Vertex::new(cgmath::vec2(0.0, -0.5), cgmath::vec3(1.0, 0.0, 0.0)),
+    Vertex::new(cgmath::vec2(0.5, 0.5), cgmath::vec3(0.0, 1.0, 0.0)),
+    Vertex::new(cgmath::vec2(-0.5, 0.5), cgmath::vec3(0.0, 0.0, 1.0)),
+];
+/* Working with vertices */
+fn create_vertex_buffer(inst: &Instance, device: &Device, data: &mut AppData) {
+    let buffer_info = vk::BufferCreateInfo::builder()
+        .size((std::mem::size_of::<Vertex>() * VERTICES.len()) as u64)
+        .usage(vk::BufferUsageFlags::VERTEX_BUFFER)
+        .sharing_mode(vk::SharingMode::EXCLUSIVE)
+        .flags(vk::BufferCreateFlags::empty());
+    assert!(!device.handle().is_null());
+    unsafe {
+        data.vertex_buffer = device.create_buffer(&buffer_info, None).unwrap();
+    }
+    let requirements = unsafe { device.get_buffer_memory_requirements(data.vertex_buffer) };
+    let mem_index = {
+        let mem_prop = unsafe {inst.get_physical_device_memory_properties(data.physical_device)};
+        let bits = requirements.memory_type_bits;
+        // HOST_COHERENT is important bc otherwise the buffer may not be up-to-date (💖 caching)
+        let flags = vk::MemoryPropertyFlags::HOST_COHERENT | vk::MemoryPropertyFlags::HOST_VISIBLE;
+
+        mem_prop.memory_types.iter()
+            .enumerate()
+            .filter(|(i, m)| {
+                // I have no idea why we do this
+                let suitability = bits & (1 << *i as u32) != 0;
+                suitability && m.property_flags.contains(flags)
+            })
+            .map(|(idx, _)| idx as u32)
+            .next()
+            .unwrap()
+    };
+    let memory_info = vk::MemoryAllocateInfo::builder()
+        .allocation_size(requirements.size)
+        .memory_type_index(mem_index);
+
+    // we need to allocate on the GPU, allocate CPU memory for the vertex data, copy the vertex data
+    // into the GPU buffer, and then unmap the CPU buffer (bc its useless now).
+    // We promise that the two buffers (when mapped into CPU memory) don't overlap
+    unsafe {
+        data.vertex_buffer_memory = device.allocate_memory(&memory_info, None).unwrap();
+        device.bind_buffer_memory(data.vertex_buffer, data.vertex_buffer_memory, 0).unwrap();
+        let memory = device.map_memory(
+            data.vertex_buffer_memory,
+            0,
+            buffer_info.size,
+            vk::MemoryMapFlags::empty()
+        ).unwrap();
+        std::ptr::copy_nonoverlapping(VERTICES.as_ptr(), memory.cast(), VERTICES.len());
+        device.unmap_memory(data.vertex_buffer_memory);
     }
 }
 
@@ -489,6 +546,7 @@ fn create_pipeline(device: &Device, data: &mut AppData) {
         device.destroy_shader_module(frag_module, None);
     }
 }
+
 fn create_framebuffers(device: &Device, data: &mut AppData) {
     let mut v = Vec::with_capacity(data.swapchain_image_views.len());
     for view in &data.swapchain_image_views {
@@ -505,6 +563,22 @@ fn create_framebuffers(device: &Device, data: &mut AppData) {
         }
     }
     data.framebuffers = v;
+}
+
+fn create_command_pool(inst: &Instance, device: &Device, data: &mut AppData) {
+    let indices = QueueFamilyIndices::get(inst, &data.surface, &data.physical_device).unwrap();
+    let info = vk::CommandPoolCreateInfo::builder()
+        .flags(vk::CommandPoolCreateFlags::empty())
+        .queue_family_index(indices.graphics);
+
+    assert!(!device.handle().is_null());
+    unsafe {
+        data.command_pool = device.create_command_pool(&info, None).unwrap()
+    }
+}
+
+fn create_command_buffers(device: &Device, data: &mut AppData) {
+    todo!("Pick up here")
 }
 
 /// The required extensions that need to be supported for this program to properly run
