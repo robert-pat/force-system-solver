@@ -2,12 +2,13 @@ use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
 use winit::event::{ElementState, StartCause, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
-use winit::keyboard::{Key, NamedKey};
+use winit::keyboard::{Key, KeyCode, NamedKey, PhysicalKey};
 use winit::window::{Window, WindowAttributes, WindowId};
 
 use crate::parsing::Truss2D;
 
 mod render_backing;
+mod drawing;
 
 #[derive(Debug)]
 struct Program {
@@ -74,8 +75,18 @@ impl ApplicationHandler for Program {
                 if event.state == ElementState::Released || self.drawing.is_none() {
                     return;
                 }
-                match event.logical_key {
-                    Key::Named(NamedKey::Tab) => self.drawing.as_mut().unwrap().change_something_shiv(),
+                match event.physical_key {
+                    PhysicalKey::Code(KeyCode::Tab) => {
+                        self.drawing.as_mut().unwrap().change_something_shiv()
+                    },
+                    PhysicalKey::Code(KeyCode::Comma) => {
+                        let v = self.drawing.as_mut().unwrap();
+                        v.new_vertex_data(false, true);
+                    },
+                    PhysicalKey::Code(KeyCode::Period) => {
+                        let v = self.drawing.as_mut().unwrap();
+                        v.new_vertex_data(true, false);
+                    },
                     _ => return,
                 }
                 if self.window.is_some() {

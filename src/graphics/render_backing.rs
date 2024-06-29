@@ -22,6 +22,7 @@ use vulkanalia::vk::{KhrSurfaceExtension, PhysicalDevice, SwapchainKHR};
 use vulkanalia::vk::KhrSwapchainExtension;
 use vulkanalia::window as vk_window;
 use winit::window::Window;
+use crate::display::drawing;
 use crate::parsing;
 
 #[derive(Debug)]
@@ -158,7 +159,7 @@ impl VulkanApp {
         }
         self.frame = (self.frame + 1) % MAX_FRAMES_IN_FLIGHT;
     }
-    pub(super) fn update_truss(&mut self, _t: &Truss2D) {}
+    pub(super) fn update_truss(&mut self, _t: &parsing::Truss2D) {}
     pub(super) fn change_something_shiv(&mut self) {
         if self.mem_mapped_vertices.is_none() {
             eprintln!("Mapping memory");
@@ -184,6 +185,25 @@ impl VulkanApp {
         }
         eprintln!();
         self.vertices = vertices;
+    }
+    pub(super) fn new_vertex_data(&mut self, rot: bool, color: bool) {
+        if self.mem_mapped_vertices.is_none() {
+            eprintln!("Mapping memory");
+            unsafe {
+                let mem_info = map_memory(&self.device, &self.data);
+                self.mem_mapped_vertices = Some(mem_info);
+            }
+        }
+        drawing::triangle_transform(&mut self.vertices, 3, color, rot).ok();
+        
+        let (pointer, size) = self.mem_mapped_vertices.unwrap();
+        assert_eq!(std::mem::size_of_val(&self.vertices), size);
+        assert_ne!(pointer.cast(), self.vertices.as_mut_ptr());
+        
+        unsafe {
+            let pointer = pointer as *mut Vertex;
+            std::ptr::copy_nonoverlapping(self.vertices.as_ptr(), pointer, self.vertices.len());
+        }
     }
     unsafe fn recreate_swapchain(&mut self, window: &Window) {
         self.device.device_wait_idle().unwrap();
@@ -348,15 +368,15 @@ type Vec3 = cgmath::Vector3<f32>;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
-struct Vertex {
-    pos: cgmath::Vector2<f32>,
-    color: cgmath::Vector3<f32>,
+pub(crate) struct Vertex {
+    pub(crate) pos: cgmath::Vector2<f32>,
+    pub(crate) color: cgmath::Vector3<f32>,
 }
 impl Vertex {
-    const fn new(pos: Vec2, color: Vec3) -> Self {
+    pub(crate) const fn new(pos: Vec2, color: Vec3) -> Self {
         Self { pos, color }
     }
-    const fn from_arr(pos: [f32; 2], color: [f32; 3]) -> Self {
+    pub(crate) const fn from_arr(pos: [f32; 2], color: [f32; 3]) -> Self {
         Self {
             pos: cgmath::vec2(pos[0], pos[1]),
             color: vec3(color[0], color[1], color[2]),
@@ -384,7 +404,7 @@ impl Vertex {
             .build();
         [pos, color]
     }
-    fn tweak(&self) -> Vertex {
+    pub(crate) fn tweak(&self) -> Vertex {
         let old = self.color;
         let new = vec3(
             (old.x + 0.27) % 1.0,
@@ -407,8 +427,8 @@ impl std::fmt::Display for Vertex {
     }
 }
 
-type NumBytes = usize;
-type NumVertex = usize;
+pub(crate) type NumBytes = usize;
+pub(crate) type NumVertex = usize;
 const MAX_FRAMES_IN_FLIGHT: usize = 2;
 const MAX_VERTICES: usize = 3;
 const VERTICES: [Vertex; MAX_VERTICES] = [
@@ -1010,20 +1030,4 @@ fn create_shader_module(device: &Device, bytes: &[u8]) -> Result<vk::ShaderModul
     unsafe {
         device.create_shader_module(&info, None)
     }
-}
-
-pub(super) struct VertexDataContext<'a> {
-    pub(super) truss: &'a Truss2D,
-}
-/* Functions for higher-level rendering */
-use parsing::Truss2D;
-/// Convert a [Truss2D] into a vertex data & write it into the provided slice. This function will
-/// not write more than max_size vertices into the buffer. If something goes wrong, the function
-/// will return an error and nothing will be written to the provided slice. If max_size is larger
-/// than buffer.len(), the function will immediately return.
-fn build_vertex_data(ctx: VertexDataContext, buffer: &mut [Vertex], max: NumVertex) -> Result<NumVertex, ()> {
-    if buffer.len() < max || max == 0 {
-        return Err(());
-    }
-    todo!()
 }
