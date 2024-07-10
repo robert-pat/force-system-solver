@@ -9,7 +9,7 @@ use nalgebra as na;
 
 use crate::parsing::DebugInfo;
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
 pub struct SolverID(u64);
 impl PartialOrd for SolverID {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
@@ -153,6 +153,18 @@ impl Direction2D {
             x: theta.to_radians().cos(),
             y: theta.to_radians().sin(),
         }
+    }
+    pub(crate) fn up() -> Self {
+        Direction2D::from_degrees(90.0)
+    }
+    pub(crate) fn down() -> Self {
+        Direction2D::from_degrees(270.0)
+    }
+    pub(crate) fn left() -> Self {
+        Direction2D::from_degrees(180.0)
+    }
+    pub(crate) fn right() -> Self {
+        Direction2D::from_degrees(0.0)
     }
 }
 impl PartialEq for Direction2D {
