@@ -622,10 +622,10 @@ struct AppliedLoad {
 /// all truss members, supports, and applied loads acting only at valid joints.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct Truss2D {
-    points: HashMap<SolverID, Point2D>,
-    connections: Vec<(SolverID, SolverID)>,
-    loads: HashMap<SolverID, AppliedLoad>,
-    supports: HashMap<SolverID, Support>,
+    pub(crate) points: HashMap<SolverID, Point2D>,
+    pub(crate) connections: Vec<(SolverID, SolverID)>,
+    pub(crate) loads: HashMap<SolverID, AppliedLoad>,
+    pub(crate) supports: HashMap<SolverID, Support>,
     pub(crate) names: HashMap<SolverID, String>
 }
 /// An error encountered in the process of creating a new [Truss2D]. Can contain either 
