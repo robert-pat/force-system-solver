@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
-use std::collections::BTreeMap;
 use std::collections::hash_map::DefaultHasher;
+use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
 use std::hash::Hasher;
 
@@ -139,13 +139,14 @@ impl Eq for Point2D {
 /// of this direction.
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct Direction2D {
-    x: f64,
-    y: f64,
+    pub(crate) x: f64,
+    pub(crate) y: f64,
 }
 impl Direction2D {
     #[allow(dead_code)]
     pub(crate) fn is_valid(&self) -> bool {
-        (self.x.is_normal() || self.x == 0f64) && (self.y.is_normal() || self.y == 0f64)
+        (self.x.is_normal() || self.x == 0f64)
+            && (self.y.is_normal() || self.y == 0f64)
             && (self.x.powf(2.0) + self.y.powf(2.0)).sqrt() - 1f64 <= 0.0000001
     }
     pub(crate) fn from_degrees(theta: f64) -> Self {
@@ -195,6 +196,14 @@ pub(crate) enum VectorComponent {
     KnownNegative, // TODO: the known positive / negative variants are never used
     /// This component of the vector is known to have the value contained
     KnownExactly(f64),
+}
+impl VectorComponent {
+    pub(crate) fn magnitude(&self) -> Option<f64> {
+        if let VectorComponent::KnownExactly(f) = self {
+            return Some(*f);
+        }
+        None
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -280,7 +289,8 @@ pub(crate) fn build_equations(
         if f.point_id() != joint.point_id {
             return Err(EquationCreationError::ForceNotAtJoint(f.id));
         }
-        if !matches!(f.magnitude, VectorComponent::KnownExactly(_)) && !template.contains_key(&f.id) {
+        if !matches!(f.magnitude, VectorComponent::KnownExactly(_)) && !template.contains_key(&f.id)
+        {
             return Err(EquationCreationError::TemplateDoesNotHaveForce(f.id));
         }
     }
@@ -428,7 +438,11 @@ pub(crate) fn solve_truss(joints: &[TrussJoint2D], debug: &mut DebugInfo) -> Sol
     if debug.enabled {
         writeln!(debug.output, "Possible Equations (Coefficients):");
         for (count, row) in potential_rows.iter().enumerate() {
-            writeln!(debug.output, "Equation {count}: {:?} = {}", row.coefficients, row.constant);
+            writeln!(
+                debug.output,
+                "Equation {count}: {:?} = {}",
+                row.coefficients, row.constant
+            );
         }
     }
 
@@ -453,7 +467,7 @@ pub(crate) fn solve_truss(joints: &[TrussJoint2D], debug: &mut DebugInfo) -> Sol
 
         assert_eq!(coefficient_matrix.len(), num_unknowns.pow(2));
         assert_eq!(constant_matrix.len(), num_unknowns);
-        
+
         // .clone() should be worth the debug info like 99.9% of the time
         let inverse = match coefficient_matrix.clone().try_inverse() {
             Some(i) => i,

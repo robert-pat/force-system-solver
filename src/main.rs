@@ -1,34 +1,65 @@
-use std::collections::HashSet;
-
+use crate::display::display_truss_and_exit;
 use crate::parsing::{ParsingError, Truss2D, TrussCreationError};
 use crate::solver::{ComputedForce, SolvingError};
+use std::collections::HashSet;
+use toml::Value;
 
+mod display;
 mod parsing;
 mod solver;
 mod tests;
-mod display;
 
-#[derive(Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 enum CommandFlags {
-    NewParser,
+    OldParser,
     UseExample,
     DisplayWhenDone,
+    ForceNoDebug,
+    GraphicsDebug,
 }
-fn main () {
+fn main() {
+    let mut ex_number: Option<i32> = None;
     let mut flags: HashSet<CommandFlags> = HashSet::new();
-    if std::env::args().any(|a| a.as_str() == "-n") {
-        flags.insert(CommandFlags::NewParser);
+    for arg in std::env::args() {
+        match arg.as_str() {
+            "--old" => flags.insert(CommandFlags::OldParser),
+            "-e" => flags.insert(CommandFlags::UseExample),
+            "-e=1" => {
+                ex_number = Some(1);
+                flags.insert(CommandFlags::UseExample)
+            }
+            "-e=2" => {
+                ex_number = Some(2);
+                flags.insert(CommandFlags::UseExample)
+            }
+            "-e=3" => {
+                ex_number = Some(3);
+                flags.insert(CommandFlags::UseExample)
+            }
+            "-g" => flags.insert(CommandFlags::DisplayWhenDone),
+            "--quiet" => flags.insert(CommandFlags::ForceNoDebug),
+            "-gdbg" => flags.insert(CommandFlags::GraphicsDebug),
+            _ => true,
+        };
     }
-    if std::env::args().any(|a| a.as_str() == "-e") {
-        flags.insert(CommandFlags::UseExample);
-    }
-    if std::env::args().any(|a| a.as_str() == "-g") {
-        flags.insert(CommandFlags::DisplayWhenDone);
+
+    // Graphics debugging case, not really intended for anything else;
+    if flags.contains(&CommandFlags::GraphicsDebug) {
+        eprintln!("Graphics Debug enabled, no other command args read.");
+        eprintln!("Showing debugging truss");
+        drop(flags);
+
+        let truss = display::get_sample_truss();
+        display_truss_and_exit(truss);
     }
 
     // Case of asking for the example problem, regardless of other settings
-    let toml_table = if flags.contains(&CommandFlags::UseExample) {
-        let text = include_str!(r"..\sample-problems\problem-one.toml");
+    let mut toml_table = if flags.contains(&CommandFlags::UseExample) {
+        let text = match ex_number {
+            Some(2) => include_str!(r"..\sample-problems\prob3.toml"),
+            Some(3) => include_str!(r"..\sample-problems\prob4.toml"),
+            _ => include_str!(r"..\sample-problems\problem-one.toml"),
+        };
         text.parse::<toml::Table>().unwrap()
     } else {
         let path = ask_user_for_path();
@@ -49,10 +80,18 @@ fn main () {
         }
     };
 
+    if flags.contains(&CommandFlags::ForceNoDebug) {
+        if let Some(Value::Boolean(b)) = toml_table.get_mut("debug") {
+            *b = false
+        };
+    }
+
     // work around the old parser (till its removed...)
-    if !flags.contains(&CommandFlags::NewParser) {
+    if flags.contains(&CommandFlags::OldParser) {
         let path = if flags.contains(&CommandFlags::UseExample) {
-            eprintln!(r"Using a sample problem! Old parser expects the example at sample-problems\problem-one.toml");
+            eprintln!(
+                r"Using a sample problem! Old parser expects the example at sample-problems\problem-one.toml"
+            );
             Some(r"sample-problems\problem-one.toml".to_string())
         } else {
             None
@@ -63,7 +102,7 @@ fn main () {
 
     let (truss, _) = solve_and_output_text(&toml_table);
     if flags.contains(&CommandFlags::DisplayWhenDone) {
-        
+        display::display_truss_and_exit(truss);
     }
 }
 
@@ -80,7 +119,10 @@ fn legacy_parser(path: Option<String>) {
     let table = file.parse::<toml::Table>().unwrap();
     let mut info = parsing::get_problem_information(&table);
     println!("..........");
-    println!("Statics Problem Solver | Solving {} at \'{file_path}\'", info.name);
+    println!(
+        "Statics Problem Solver | Solving {} at \'{file_path}\'",
+        info.name
+    );
     if info.debug.enabled {
         eprintln!("------------");
         eprintln!("Debug info enabled! The parser & solver will spit out a lot of text!");
@@ -142,7 +184,7 @@ fn legacy_parser(path: Option<String>) {
                 result.value.abs(),
             )
         }
-            .expect("Couldn't write to output!");
+        .expect("Couldn't write to output!");
     }
     writeln!(info.debug.output, "Solving Complete, Program Quitting!").unwrap();
 }
@@ -165,17 +207,25 @@ fn ask_user_for_path() -> String {
 /// Uses the (already created) [toml::Table] as input for the (new) parser and solver.
 /// This is handle writing text output to the appropriate location (specified in the input file) and
 /// formating for errors encountered in the solving process.
-/// 
+///
 /// This functions returns the parsed truss and calculated values, but these can be ignored.
 fn solve_and_output_text(table: &toml::Table) -> (Truss2D, Vec<ComputedForce>) {
     let mut p_info = parsing::get_problem_information(table);
     let out = &mut p_info.debug;
-    writeln!(out.output, "Statics Problem Solver | Working on {}", p_info.name).ok();
+    writeln!(
+        out.output,
+        "Statics Problem Solver | Working on {}",
+        p_info.name
+    )
+    .ok();
     if out.enabled {
         eprintln!("-> Debug information is enabled; extra info will be output <-");
     }
     if p_info.file_write {
-        eprintln!("-> File writing is enabled! Output & answers written to answer-{}.txt <-", p_info.name);
+        eprintln!(
+            "-> File writing is enabled! Output & answers written to answer-{}.txt <-",
+            p_info.name
+        );
     }
     #[allow(unused)] // IntelliJ can't read format strings for use
     let truss = match Truss2D::new(table) {
@@ -198,7 +248,7 @@ fn solve_and_output_text(table: &toml::Table) -> (Truss2D, Vec<ComputedForce>) {
 
     let solutions = match solver::solve_truss(&joints, out) {
         Ok(r) => r,
-        Err(SolvingError::NoMatrixWorked) =>  panic!("No invertible matrix found for this problem"),
+        Err(SolvingError::NoMatrixWorked) => panic!("No invertible matrix found for this problem"),
     };
     for res in &solutions {
         let name = match truss.names.get(&res.force) {
@@ -211,7 +261,8 @@ fn solve_and_output_text(table: &toml::Table) -> (Truss2D, Vec<ComputedForce>) {
         match out.enabled {
             true => writeln!(out.output, "{name} [{id}]: {} ({state})", res.force),
             false => writeln!(out.output, "{name}: {} ({state})", res.force),
-        }.ok();
+        }
+        .ok();
     }
     writeln!(out.output, "Solving complete!").ok();
     (truss, solutions)
