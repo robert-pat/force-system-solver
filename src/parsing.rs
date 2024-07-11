@@ -963,7 +963,9 @@ fn into_connections(t: &Value, names: &mut HashMap<SolverID, String>) -> Connect
         match name1.cmp(name2) {
             Ordering::Greater => connections.push((id1, id2)),
             Ordering::Equal => {
-                todo!("Should 0 length members be an error, warning, or ignored")
+                #[cfg(debug_assertions)]
+                eprintln!("Warning: 0 length member {name1} declared!");
+                continue;
             }
             Ordering::Less => connections.push((id2, id1)),
         }

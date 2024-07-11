@@ -102,7 +102,7 @@ fn main() {
 
     let (truss, _) = solve_and_output_text(&toml_table);
     if flags.contains(&CommandFlags::DisplayWhenDone) {
-        display::display_truss_and_exit(truss);
+        display_truss_and_exit(truss);
     }
 }
 

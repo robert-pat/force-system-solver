@@ -27,8 +27,8 @@ fn draw_truss(truss: &Truss2D) {
 
     let screen_bounds = (mq::screen_width(), mq::screen_height());
     mq::clear_background(mq::BEIGE);
-
     let coordinate_map = make_coordinate_map(truss, screen_bounds, SCREEN_PADDING);
+
     for point in truss.points.values() {
         const POINT_WIDTH: f32 = 18_f32;
         const POINT_HEIGHT: f32 = 18_f32;
@@ -44,7 +44,6 @@ fn draw_truss(truss: &Truss2D) {
     }
 
     const MEMBER_THICKNESS: f32 = 9.5_f32;
-
     for (p1, p2) in truss.connections.iter() {
         let (x1, y1) = coordinate_map(truss.points.get(p1).unwrap().pos());
         let (x2, y2) = coordinate_map(truss.points.get(p2).unwrap().pos());
@@ -99,6 +98,7 @@ fn draw_truss(truss: &Truss2D) {
     }
 }
 
+/// Begin the control loop for drawing the truss to the screen & handling inputs
 async fn init_display_truss(truss: Truss2D) {
     loop {
         draw_truss(&truss);
@@ -161,6 +161,8 @@ fn make_coordinate_map(
     }
 }
 
+/// Returns a truss filled with testing values for drawing. This truss is physically impossible and
+/// not in equilibrium. It can not be solved
 pub(crate) fn get_sample_truss() -> Truss2D {
     let points: HashMap<SolverID, Point2D> = [
         ("A", (0, 0)),
@@ -201,7 +203,7 @@ pub(crate) fn get_sample_truss() -> Truss2D {
         .collect();
     let mut supports = HashMap::new();
     supports.insert(SolverID::new("F"), Support::Pin {at: SolverID::new("F")});
-    
+
     Truss2D {
         points,
         connections,

@@ -210,7 +210,7 @@ impl VectorComponent {
 pub(crate) struct Force2D {
     magnitude: VectorComponent,
     direction: Direction2D,
-    point: Point2D, // TODO: may at some point replace this with just the point's ID
+    point: Point2D,
     id: SolverID,
 }
 impl Force2D {
