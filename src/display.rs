@@ -51,27 +51,30 @@ fn draw_truss(truss: &Truss2D) {
         mq::draw_line(x1, y1, x2, y2, MEMBER_THICKNESS, mq::BLACK);
     }
 
-    const LOAD_MAG_SCALAR: f32 = 1_f32;
+    const LOAD_MAG_SCALAR: f32 = 1_f32; // eventually will need to be non-const
     const LOAD_THICKNESS: f32 = 5_f32;
     const ARROW_SCALE: f32 = 10_f32;
     for load in truss.loads.values() {
         let (x, y) = coordinate_map(truss.points.get(&load.at).unwrap().pos());
-        let (x_dir, y_dir) = (load.dir.x as f32, load.dir.y as f32);
+        // Invert the y-dir for screen space conversion (coordinate_map already does for pos)
+        let (x_dir, y_dir) = (load.dir.x as f32, -load.dir.y as f32);
         let mag = load.mag.magnitude().unwrap() as f32;
         let (end_x, end_y) = (
             x + mag * x_dir * LOAD_MAG_SCALAR,
-            y - mag * y_dir * LOAD_MAG_SCALAR, // flip y b/c the screen axis has +y downwards
+            y + mag * y_dir * LOAD_MAG_SCALAR,
         );
         mq::draw_line(x, y, end_x, end_y, LOAD_THICKNESS, mq::BROWN);
 
         // vector from origin to tip of arrow / end of line
         let start = mq::vec2(end_x, end_y);
-        // Find the angle between the vertical and the direction our line is pointing;
-        // reverse it bc we need to turn to triangle counter to this
-        let angle = mq::vec2(0.0, 1.0)
-            .dot(mq::vec2(x_dir, y_dir).normalize())
-            .acos();
-        let rotation = mq::Vec2::from_angle(-angle + std::f32::consts::PI);
+        let rotation = {
+            let test = mq::vec3(0.0, 1.0, 0.0); // 3D bc we need to cross them later
+            let dir = mq::vec3(x_dir, y_dir, 0.0);
+            let cos = test.angle_between(dir);
+            let sign = test.cross(dir).z.signum(); // tells us which 'side' the other vector is on
+            mq::Vec2::from_angle(cos * sign)
+        };
+
         // rotate the unit triangle by the amount we calculated & translate it
         let c1 = rotation.rotate(mq::vec2(0.0, 1.0).normalize()) * ARROW_SCALE;
         let c2 = rotation.rotate(mq::vec2(1.0, -1.0).normalize()) * ARROW_SCALE;
@@ -80,7 +83,7 @@ fn draw_truss(truss: &Truss2D) {
     }
 
     const PIN_RADIUS: f32 = 6.5_f32;
-    const ROLLER_SIZE: f32 = 7_f32;
+    const ROLLER_SIZE: f32 = 10_f32;
     for support in truss.supports.values() {
         let (x, y) = coordinate_map(truss.points.get(&support.at()).unwrap().pos());
         match support {
@@ -89,10 +92,8 @@ fn draw_truss(truss: &Truss2D) {
             }
             Support::Roller { dir, .. } => {
                 let start = mq::vec2(x, y);
-                // invert y for screen space
-                let delta = mq::vec2(dir.x as f32, -dir.y as f32) * ROLLER_SIZE;
-                let normal = mq::vec2(1.0, -(dir.x / dir.y) as f32).normalize() * ROLLER_SIZE;
-                mq::draw_triangle(start - normal, start + normal, start + delta, mq::BLUE);
+                let tri = triangle_pointing(*dir, ROLLER_SIZE);
+                mq::draw_triangle(start + tri[0], start + tri[1], start + tri[2], mq::BLUE);
             }
         }
     }
@@ -108,6 +109,26 @@ async fn init_display_truss(truss: Truss2D) {
         }
         mq::next_frame().await
     }
+}
+
+/// Returns the 3 vertices of a unit triangle, scaled by scale, pointing in the same direction as
+/// dir.
+/// NOTE: this function already accounts for the conversion to screen space, it will handle flipping
+/// the y-axis automatically.
+fn triangle_pointing(dir: Direction2D, scale: f32) -> [mq::Vec2; 3] {
+    let rotation = {
+        let test = mq::vec3(0.0, 1.0, 0.0); // 3D bc we need to cross them later
+        let dir = mq::vec3(dir.x as f32, -dir.y as f32, 0.0);
+        let cos = test.angle_between(dir);
+        let sign = test.cross(dir).z.signum(); // tells us which 'side' the other vector is on
+        mq::Vec2::from_angle(cos * sign)
+    };
+    // rotate the unit triangle by the amount we calculated
+    [
+        rotation.rotate(mq::vec2(0.0, 1.0).normalize()) * scale,
+        rotation.rotate(mq::vec2(1.0, -1.0).normalize()) * scale,
+        rotation.rotate(mq::vec2(-1.0, -1.0).normalize()) * scale,
+    ]
 }
 
 /// Returns a closure that will map coordinates from the truss onto the available screen space, with
@@ -203,6 +224,10 @@ pub(crate) fn get_sample_truss() -> Truss2D {
         .collect();
     let mut supports = HashMap::new();
     supports.insert(SolverID::new("F"), Support::Pin {at: SolverID::new("F")});
+    supports.insert(SolverID::new("C"), Support::Roller {
+        at: SolverID::new("C"),
+        dir: Direction2D::from_degrees(70.0),
+    });
 
     Truss2D {
         points,
