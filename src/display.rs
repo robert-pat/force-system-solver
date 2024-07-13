@@ -88,7 +88,7 @@ fn draw_truss(truss: &Truss2D) {
     }
 }
 
-/// Begin the control loop for drawing the truss to the screen & handling inputs
+/// Begin the control loop for drawing the truss to the screen & handling inputs.
 async fn init_display_truss(truss: Truss2D) {
     loop {
         draw_truss(&truss);
@@ -104,7 +104,7 @@ async fn init_display_truss(truss: Truss2D) {
 /// same direction as dir. The vertices are wound clockwise.
 /// 
 /// NOTE: this function already accounts for the conversion to screen space, it will handle flipping
-/// the y-axis automatically.
+/// the y-component automatically so that the drawn triangle appears as expected.
 fn triangle_with_rotation(dir: Direction2D, scale: f32) -> [mq::Vec2; 3] {
     let rotation = {
         let test = mq::vec3(0.0, 1.0, 0.0); // 3D bc we need to cross them later
