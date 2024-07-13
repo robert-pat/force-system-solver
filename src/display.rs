@@ -24,7 +24,6 @@ pub fn display_truss_and_exit(truss: Truss2D) -> ! {
 /// Draws the given truss to the screen with macroquad.
 fn draw_truss(truss: &Truss2D) {
     const SCREEN_PADDING: f32 = 60_f32;
-
     let screen_bounds = (mq::screen_width(), mq::screen_height());
     mq::clear_background(mq::BEIGE);
     let coordinate_map = make_coordinate_map(truss, screen_bounds, SCREEN_PADDING);
@@ -53,7 +52,7 @@ fn draw_truss(truss: &Truss2D) {
 
     const LOAD_MAG_SCALAR: f32 = 1_f32; // eventually will need to be non-const
     const LOAD_THICKNESS: f32 = 5_f32;
-    const ARROW_SCALE: f32 = 10_f32;
+    const LOAD_ARROW_SCALE: f32 = 10_f32;
     for load in truss.loads.values() {
         let (x, y) = coordinate_map(truss.points.get(&load.at).unwrap().pos());
         // Invert the y-dir for screen space conversion (coordinate_map already does for pos)
@@ -67,32 +66,22 @@ fn draw_truss(truss: &Truss2D) {
 
         // vector from origin to tip of arrow / end of line
         let start = mq::vec2(end_x, end_y);
-        let rotation = {
-            let test = mq::vec3(0.0, 1.0, 0.0); // 3D bc we need to cross them later
-            let dir = mq::vec3(x_dir, y_dir, 0.0);
-            let cos = test.angle_between(dir);
-            let sign = test.cross(dir).z.signum(); // tells us which 'side' the other vector is on
-            mq::Vec2::from_angle(cos * sign)
-        };
-
-        // rotate the unit triangle by the amount we calculated & translate it
-        let c1 = rotation.rotate(mq::vec2(0.0, 1.0).normalize()) * ARROW_SCALE;
-        let c2 = rotation.rotate(mq::vec2(1.0, -1.0).normalize()) * ARROW_SCALE;
-        let c3 = rotation.rotate(mq::vec2(-1.0, -1.0).normalize()) * ARROW_SCALE;
-        mq::draw_triangle(start + c1, start + c2, start + c3, mq::BROWN);
+        let tri = triangle_with_rotation(load.dir, LOAD_ARROW_SCALE);
+        
+        mq::draw_triangle(start + tri[0], start + tri[1], start + tri[2], mq::BROWN);
     }
 
-    const PIN_RADIUS: f32 = 6.5_f32;
-    const ROLLER_SIZE: f32 = 10_f32;
+    const PIN_SCALE: f32 = 6.5_f32;
+    const ROLLER_SCALE: f32 = 10_f32;
     for support in truss.supports.values() {
         let (x, y) = coordinate_map(truss.points.get(&support.at()).unwrap().pos());
         match support {
             Support::Pin { .. } => {
-                mq::draw_circle(x, y, PIN_RADIUS, mq::BLUE);
+                mq::draw_circle(x, y, PIN_SCALE, mq::BLUE);
             }
             Support::Roller { dir, .. } => {
                 let start = mq::vec2(x, y);
-                let tri = triangle_pointing(*dir, ROLLER_SIZE);
+                let tri = triangle_with_rotation(*dir, ROLLER_SCALE);
                 mq::draw_triangle(start + tri[0], start + tri[1], start + tri[2], mq::BLUE);
             }
         }
@@ -111,11 +100,12 @@ async fn init_display_truss(truss: Truss2D) {
     }
 }
 
-/// Returns the 3 vertices of a unit triangle, scaled by scale, pointing in the same direction as
-/// dir.
+/// Returns the three vertices of a unit triangle, scaled by scale and rotated to point in the
+/// same direction as dir. The vertices are wound clockwise.
+/// 
 /// NOTE: this function already accounts for the conversion to screen space, it will handle flipping
 /// the y-axis automatically.
-fn triangle_pointing(dir: Direction2D, scale: f32) -> [mq::Vec2; 3] {
+fn triangle_with_rotation(dir: Direction2D, scale: f32) -> [mq::Vec2; 3] {
     let rotation = {
         let test = mq::vec3(0.0, 1.0, 0.0); // 3D bc we need to cross them later
         let dir = mq::vec3(dir.x as f32, -dir.y as f32, 0.0);
