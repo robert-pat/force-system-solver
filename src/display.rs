@@ -116,12 +116,10 @@ fn draw_truss(truss: &Truss2D, settings: TrussDrawSettings) {
     }
 }
 
-
-
 fn draw_labels(truss: &Truss2D, settings: TrussDrawSettings) {
     let screen_bounds = (mq::screen_width(), mq::screen_height());
     let to_screen_space = make_coordinate_map(truss, screen_bounds, settings.screen_padding);
-    
+
     for (id, point) in truss.points.iter() {
         let (x, y) = {
             let p = to_screen_space(point.pos());
@@ -131,7 +129,7 @@ fn draw_labels(truss: &Truss2D, settings: TrussDrawSettings) {
             Some(i) => i.as_str(),
             None => "(unnamed)",
         };
-        
+
         mq::draw_text(name, x, y, 28f32, mq::WHITE);
     }
 }
@@ -230,7 +228,7 @@ fn make_coordinate_map(
     }
 }
 
-fn create_position_map(truss: &Truss2D, ) -> impl Fn((f64, f64)) -> (f32, f32) {
+fn create_position_map(truss: &Truss2D) -> impl Fn((f64, f64)) -> (f32, f32) {
     todo!() as fn((f64, f64)) -> (f32, f32)
 }
 
