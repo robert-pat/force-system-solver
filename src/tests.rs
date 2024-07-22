@@ -2,14 +2,13 @@
 use std::collections::BTreeMap;
 
 #[cfg(test)]
-use toml::Table;
-
-#[cfg(test)]
 use crate::parsing;
 #[cfg(test)]
 use crate::parsing::DebugInfo;
 #[cfg(test)]
 use crate::solver;
+#[cfg(test)]
+use toml::Table;
 
 // TODO: I should make test cases for solving & parsing at some point
 

@@ -34,6 +34,7 @@ struct TrussDrawSettings {
     roller_scale: f32,
 }
 impl TrussDrawSettings {
+    #[allow(dead_code)]
     const fn new(options: [f32; 9]) -> Self {
         TrussDrawSettings {
             screen_padding: options[0],
@@ -68,7 +69,8 @@ impl Default for TrussDrawSettings {
 fn draw_truss(truss: &Truss2D, settings: TrussDrawSettings) {
     let screen_bounds = (mq::screen_width(), mq::screen_height());
     mq::clear_background(mq::BEIGE);
-    let coordinate_map = make_coordinate_map(truss, screen_bounds, settings.screen_padding);
+    //let coordinate_map = linear_independent_coord_map(truss, screen_bounds, settings.screen_padding);
+    let coordinate_map = make_coord_map(truss, ScreenArea::with_padding(screen_bounds, 60_f32));
 
     for point in truss.points.values() {
         let (width, height) = (settings.point_width, settings.point_height);
@@ -116,9 +118,13 @@ fn draw_truss(truss: &Truss2D, settings: TrussDrawSettings) {
     }
 }
 
+/// Draws labels for each point onto the screen. This uses the names from the truss's names map.
 fn draw_labels(truss: &Truss2D, settings: TrussDrawSettings) {
     let screen_bounds = (mq::screen_width(), mq::screen_height());
-    let to_screen_space = make_coordinate_map(truss, screen_bounds, settings.screen_padding);
+    let to_screen_space = make_coord_map(
+        truss,
+        ScreenArea::with_padding(screen_bounds, settings.screen_padding),
+    );
 
     for (id, point) in truss.points.iter() {
         let (x, y) = {
@@ -168,13 +174,74 @@ fn triangle_with_rotation(dir: Direction2D, scale: f32) -> [mq::Vec2; 3] {
     ]
 }
 
-// TODO: add this to the truss drawing function so that it can be drawn in a specified screen
-//  chunk. Potentially even replace padding too
+/// A rectangle, with a min and max value for the x- and y- directions.
 struct ScreenArea {
     x_min: f32,
     x_max: f32,
     y_min: f32,
     y_max: f32,
+}
+impl ScreenArea {
+    fn with_padding(extents: (f32, f32), padding: f32) -> Self {
+        ScreenArea {
+            x_min: padding,
+            y_min: padding,
+            x_max: extents.0 - padding,
+            y_max: extents.1 - padding,
+        }
+    }
+    fn width(&self) -> f32 {
+        self.x_max - self.x_min
+    }
+    fn height(&self) -> f32 {
+        self.y_max - self.y_min
+    }
+    fn from_truss(t: &Truss2D) -> Self {
+        let (x_min, x_max) = t.points.values().map(|p| p.pos().0).fold(
+            (f64::INFINITY, f64::NEG_INFINITY),
+            |(x_min, x_max), x| {
+                (
+                    if x < x_min { x } else { x_min },
+                    if x > x_max { x } else { x_max },
+                )
+            },
+        );
+        let (y_min, y_max) = t.points.values().map(|p| p.pos().1).fold(
+            (f64::INFINITY, f64::NEG_INFINITY),
+            |(y_min, y_max), y| {
+                (
+                    if y < y_min { y } else { y_min },
+                    if y > y_max { y } else { y_max },
+                )
+            },
+        );
+        ScreenArea {
+            x_min: x_min as f32,
+            x_max: x_max as f32,
+            y_min: y_min as f32,
+            y_max: y_max as f32,
+        }
+    }
+}
+
+/// Create a closure to map between the truss coordinate space and screen space. This is a simple
+/// map & is computed once, so any change to either the truss or screen dimensions will require a
+/// new closure to be created.
+///
+/// This map will have the same scaling for the two axis, so that shapes are preserved. Note that
+/// this might mean some trusses get very squashed along one axis if they are very different in size.
+/// The [make_coord_map_independent] function has the same functionality but w/ independent axes.
+fn make_coord_map(truss: &Truss2D, area: ScreenArea) -> impl Fn((f64, f64)) -> (f32, f32) {
+    // Find the bounds for our input ranges
+    let source = ScreenArea::from_truss(truss);
+    let scale = (area.width() / source.width()).min(area.height() / source.height());
+
+    move |(x, y)| {
+        let x = (x as f32 - source.x_min) * scale + area.x_min;
+        let y = (y as f32 - source.y_min) * scale + area.y_min;
+
+        (x, area.y_max - y + area.y_min)
+    }
 }
 
 /// Returns a closure that will map coordinates from the truss onto the available screen space, with
@@ -184,52 +251,29 @@ struct ScreenArea {
 /// This map takes will also flip the y-coordinate, so that a larger y-input results in a coordinate
 /// drawn closer to the top of the screen. Macroquad has the +y-axis pointing downward, so this
 /// means very positive y-values get mapped close to 0 & vise-versa
-fn make_coordinate_map(
+#[allow(dead_code)]
+fn make_coord_map_independent(
     truss: &Truss2D,
     screen_max: (f32, f32),
     padding: f32,
 ) -> impl Fn((f64, f64)) -> (f32, f32) {
-    // TODO: make this return a consistent scaling for both x and y directions
-
     // Find the bounds for our input ranges
-    let (x_min, x_max) = truss
-        .points
-        .values()
-        .map(|p| p.pos().0)
-        // take the smallest and largest x pos in the position range
-        .fold((f64::INFINITY, f64::NEG_INFINITY), |(x_min, x_max), x| {
-            (
-                if x < x_min { x } else { x_min },
-                if x > x_max { x } else { x_max },
-            )
-        });
-    let (y_min, y_max) = truss
-        .points
-        .values()
-        .map(|p| p.pos().1)
-        // take the smallest and largest y pos in the position range
-        .fold((f64::INFINITY, f64::NEG_INFINITY), |(y_min, y_max), y| {
-            (
-                if y < y_min { y } else { y_min },
-                if y > y_max { y } else { y_max },
-            )
-        });
+    let source = ScreenArea::from_truss(truss);
+    let (x_min, x_max) = (source.x_min, source.x_max);
+    let (y_min, y_max) = (source.y_min, source.y_max);
+
     // Find the bounds for our output ranges
-    let x_range = (padding as f64, (screen_max.0 - padding) as f64);
-    let y_range = (padding as f64, (screen_max.1 - padding) as f64);
+    let x_range = (padding, screen_max.0 - padding);
+    let y_range = (padding, screen_max.1 - padding);
 
     // Map the input ranges to the output ranges (and convert f64 -> f32)
     // https://stackoverflow.com/questions/5731863/mapping-a-numeric-range-onto-another
     // NOTE: the y-coordinate is reversed bc screen space has (0, 0) in the top left
     move |(x, y)| {
-        let x = (x - x_min) * (x_range.1 - x_range.0) / (x_max - x_min) + x_range.0;
-        let y = (y - y_min) * (y_range.1 - y_range.0) / (y_max - y_min) + y_range.0;
-        (x as f32, screen_max.1 - (y as f32))
+        let x = (x as f32 - x_min) * (x_range.1 - x_range.0) / (x_max - x_min) + x_range.0;
+        let y = (y as f32 - y_min) * (y_range.1 - y_range.0) / (y_max - y_min) + y_range.0;
+        (x, screen_max.1 - y)
     }
-}
-
-fn create_position_map(truss: &Truss2D) -> impl Fn((f64, f64)) -> (f32, f32) {
-    todo!() as fn((f64, f64)) -> (f32, f32)
 }
 
 /// Returns a truss filled with testing values for drawing. This truss is physically impossible and
