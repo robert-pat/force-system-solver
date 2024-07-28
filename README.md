@@ -30,7 +30,7 @@ really have any major plans for what this program will be, so yeah. So far I've 
  - Rewrote the code to parse a truss (w/ arguably no difference in functionality)
 
 #### Building & Running
-Exactly what you'd expect for a rust project. Assuming you have [rustup](see https://www.rust-lang.org/tools/install),
+Exactly what you'd expect for a rust project. Assuming you have [rustup](https://www.rust-lang.org/tools/install),
 run with ```cargo run```. File paths for inputs are relative to the executable. It might take a sec for the dependencies
 to download / compile the first time you run it 
 (Sorry, linear algebra libraries are hard to make & drawing to the screen is worse).
