@@ -254,7 +254,7 @@ fn solve_and_output_text(table: &toml::Table) -> (Truss2D, Vec<ComputedForce>) {
     for res in &solutions {
         let name = match truss.names.get(&res.force) {
             Some(n) => n.as_str(),
-            None => "No name found", // TODO: how to get a name back for the components of a pin
+            None => "No name found",
         };
         let state = if res.value > 0f64 { "T" } else { "C" };
         let id = res.force;

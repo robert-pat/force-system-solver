@@ -765,7 +765,7 @@ impl Truss2D {
                     let y_name = pin_name.clone() + " (y component)";
                     self.names.insert(x_id, x_name);
                     self.names.insert(y_id, y_name);
-                    
+
                     let joint = joints.get_mut(at).unwrap();
                     let point = self.points.get(at).unwrap();
 
