@@ -50,7 +50,7 @@ fn main() {
         drop(flags);
 
         let truss = display::get_sample_truss();
-        display_truss_and_exit(truss);
+        display_truss_and_exit(truss, Some("Graphics Sample"));
     }
 
     // Case of asking for the example problem, regardless of other settings
@@ -102,7 +102,8 @@ fn main() {
 
     let (truss, _) = solve_and_output_text(&toml_table);
     if flags.contains(&CommandFlags::DisplayWhenDone) {
-        display_truss_and_exit(truss);
+        let problem_info = parsing::get_problem_information(&toml_table);
+        display_truss_and_exit(truss, Some(&problem_info.name));
     }
 }
 
@@ -253,14 +254,14 @@ fn solve_and_output_text(table: &toml::Table) -> (Truss2D, Vec<ComputedForce>) {
     for res in &solutions {
         let name = match truss.names.get(&res.force) {
             Some(n) => n.as_str(),
-            None => "no name found",
+            None => "No name found", // TODO: how to get a name back for the components of a pin
         };
         let state = if res.value > 0f64 { "T" } else { "C" };
         let id = res.force;
 
         match out.enabled {
-            true => writeln!(out.output, "{name} [{id}]: {} ({state})", res.force),
-            false => writeln!(out.output, "{name}: {} ({state})", res.force),
+            true => writeln!(out.output, "{name} [{id}]: {} ({state})", res.value),
+            false => writeln!(out.output, "{name}: {:.8} ({state})", res.value),
         }
         .ok();
     }

@@ -9,13 +9,15 @@ use crate::solver::{Direction2D, Point2D, SolverID, VectorComponent};
 /// but will exit the program once the window is closed.
 ///
 /// This function should only be called when the program is otherwise ready to exit
-pub fn display_truss_and_exit(truss: Truss2D) -> ! {
+pub fn display_truss_and_exit(truss: Truss2D, name: Option<&str>) -> ! {
+    let name = String::from("Truss Visualization: ") + name.unwrap_or("");
+
     // This function is not actually intended to be called by user code; the library expects:
     // #[macroquad::main("label)]
     // async fn main() {}
     // which becomes this call, but I have a lot more code to run before this, so we abuse the
     // library (& DON'T UPDATE THE CRATE WITHOUT CHECKING THIS)
-    macroquad::Window::new("Truss Visualization", init_display_truss(truss));
+    macroquad::Window::new(&name, init_display_truss(truss));
     eprintln!("Exiting!");
 
     std::process::exit(0);
@@ -23,7 +25,7 @@ pub fn display_truss_and_exit(truss: Truss2D) -> ! {
 
 #[derive(Clone, Copy, Debug)]
 struct TrussDrawSettings {
-    screen_padding: f32,
+    screen_area: ScreenArea,
     point_width: f32,
     point_height: f32,
     member_thickness: f32,
@@ -34,25 +36,9 @@ struct TrussDrawSettings {
     roller_scale: f32,
 }
 impl TrussDrawSettings {
-    #[allow(dead_code)]
-    const fn new(options: [f32; 9]) -> Self {
+    const fn default_with(area: ScreenArea) -> Self {
         TrussDrawSettings {
-            screen_padding: options[0],
-            point_width: options[1],
-            point_height: options[2],
-            member_thickness: options[3],
-            load_mag_scalar: options[4],
-            load_thickness: options[5],
-            load_arrow_scale: options[6],
-            pin_scale: options[7],
-            roller_scale: options[8],
-        }
-    }
-}
-impl Default for TrussDrawSettings {
-    fn default() -> Self {
-        TrussDrawSettings {
-            screen_padding: 60_f32,
+            screen_area: area,
             point_width: 18_f32,
             point_height: 18_f32,
             member_thickness: 9.5_f32,
@@ -67,10 +53,8 @@ impl Default for TrussDrawSettings {
 
 /// Draws the given truss to the screen with macroquad.
 fn draw_truss(truss: &Truss2D, settings: TrussDrawSettings) {
-    let screen_bounds = (mq::screen_width(), mq::screen_height());
     mq::clear_background(mq::BEIGE);
-    //let coordinate_map = linear_independent_coord_map(truss, screen_bounds, settings.screen_padding);
-    let coordinate_map = make_coord_map(truss, ScreenArea::with_padding(screen_bounds, 60_f32));
+    let coordinate_map = make_coord_map(truss, settings.screen_area);
 
     for point in truss.points.values() {
         let (width, height) = (settings.point_width, settings.point_height);
@@ -118,33 +102,58 @@ fn draw_truss(truss: &Truss2D, settings: TrussDrawSettings) {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+struct TextDrawSettings {
+    screen_area: ScreenArea,
+    font_size: f32,
+    font_color: mq::Color,
+    text_offset: (f32, f32),
+}
+impl TextDrawSettings {
+    const fn default_with(area: ScreenArea) -> Self {
+        TextDrawSettings {
+            screen_area: area,
+            font_size: 32f32,
+            font_color: mq::WHITE,
+            text_offset: (2.0, -1.5),
+        }
+    }
+}
+
 /// Draws labels for each point onto the screen. This uses the names from the truss's names map.
-fn draw_labels(truss: &Truss2D, settings: TrussDrawSettings) {
-    let screen_bounds = (mq::screen_width(), mq::screen_height());
-    let to_screen_space = make_coord_map(
-        truss,
-        ScreenArea::with_padding(screen_bounds, settings.screen_padding),
-    );
+fn draw_labels(truss: &Truss2D, settings: TextDrawSettings) {
+    let to_screen_space = make_coord_map(truss, settings.screen_area);
 
     for (id, point) in truss.points.iter() {
         let (x, y) = {
             let p = to_screen_space(point.pos());
-            (p.0 + 2., p.1 - 2.)
+            (p.0 + settings.text_offset.0, p.1 + settings.text_offset.1)
         };
         let name = match truss.names.get(id) {
             Some(i) => i.as_str(),
             None => "(unnamed)",
         };
 
-        mq::draw_text(name, x, y, 28f32, mq::WHITE);
+        mq::draw_text(name, x, y, settings.font_size, settings.font_color);
     }
 }
+
+/// The default amount of padding around the edge of the window. This is used when drawing the truss
+/// to take up the full screen.
+const DEFAULT_PADDING: f32 = 60_f32;
 
 /// Begin the control loop for drawing the truss to the screen & handling inputs.
 async fn init_display_truss(truss: Truss2D) {
     loop {
-        draw_truss(&truss, Default::default());
-        draw_labels(&truss, Default::default());
+        let area = {
+            let extents = (mq::screen_width(), mq::screen_height());
+            ScreenArea::with_padding(extents, DEFAULT_PADDING)
+        };
+        let truss_settings = TrussDrawSettings::default_with(area);
+        let draw_settings = TextDrawSettings::default_with(area);
+
+        draw_truss(&truss, truss_settings);
+        draw_labels(&truss, draw_settings);
 
         if mq::is_key_pressed(mq::KeyCode::Escape) {
             break;
@@ -174,7 +183,12 @@ fn triangle_with_rotation(dir: Direction2D, scale: f32) -> [mq::Vec2; 3] {
     ]
 }
 
-/// A rectangle, with a min and max value for the x- and y- directions.
+/// A rectangular area of the window, measured with (0, 0) in the top right. The positive x-axis
+/// extends left and the positive y-axis extends down.
+///
+/// Used to specify where on the screen things should be drawn in, i.e. what chunk of the window
+/// a feature should be drawn in.
+#[derive(Copy, Clone, Debug)]
 struct ScreenArea {
     x_min: f32,
     x_max: f32,
@@ -329,11 +343,21 @@ pub(crate) fn get_sample_truss() -> Truss2D {
         },
     );
 
+    let names: HashMap<SolverID, String> = [
+        (SolverID::new("A"), String::from("A")),
+        (SolverID::new("B"), String::from("B")),
+        (SolverID::new("C"), String::from("C")),
+        (SolverID::new("D"), String::from("D")),
+        (SolverID::new("E"), String::from("E")),
+        (SolverID::new("F"), String::from("F")),
+    ]
+    .into_iter()
+    .collect();
     Truss2D {
         points,
         connections,
         loads,
         supports,
-        names: HashMap::new(),
+        names,
     }
 }

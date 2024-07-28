@@ -19,8 +19,8 @@ pub(crate) fn get_problem_information(problem: &Table) -> ProblemInformation {
     let table = problem;
     let name = match table.get("name") {
         Some(Value::String(s)) => s.clone(),
-        Some(_) => String::from("(Invalid name--not text)"),
-        None => String::from("No name"),
+        Some(value) => value.to_string(),
+        None => String::from("Unnamed problem"),
     };
     let debug_enabled = match table.get("debug") {
         Some(Value::Boolean(b)) => *b,
