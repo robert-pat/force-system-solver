@@ -229,7 +229,7 @@ fn solve_and_output_text(table: &toml::Table) -> (Truss2D, Vec<ComputedForce>) {
         );
     }
     #[allow(unused)] // IntelliJ can't read format strings for use
-    let truss = match Truss2D::new(table) {
+    let mut truss = match Truss2D::new(table) {
         Ok(t) => t,
         Err(TrussCreationError::PointNonExistent(m)) => panic!("Error: Non-existent point: {m}"),
         Err(TrussCreationError::PointsOverlap(m)) => panic!("Error: Points can not overlap: {m}"),

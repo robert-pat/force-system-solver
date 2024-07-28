@@ -720,7 +720,7 @@ impl Truss2D {
     ///
     /// NOTE: currently there is not a way to convert the force components for a pin back into the
     /// human-friendly names, but everything else can be compared to this truss's names field.
-    pub(crate) fn condense(&self) -> Vec<TrussJoint2D> {
+    pub(crate) fn condense(&mut self) -> Vec<TrussJoint2D> {
         let mut joints: HashMap<SolverID, TrussJoint2D> = self
             .points
             .keys()
@@ -755,12 +755,17 @@ impl Truss2D {
         for (id, support) in &self.supports {
             match support {
                 Support::Pin { at } => {
-                    /* TODO: how to get this information back from the solver? After solving we'll
-                    have "Pin {#}x at {point}" as a SolverID, but how to know that corresponds
-                    to an x component of this pin */
                     let x_id = id.concatenate(SolverID::new("x"));
                     let y_id = id.concatenate(SolverID::new("y"));
 
+                    // TODO: this solution could leak memory in the names HashMap if this pin gets
+                    //  deleted
+                    let pin_name = self.names.get(id).unwrap();
+                    let x_name = pin_name.clone() + " (x component)";
+                    let y_name = pin_name.clone() + " (y component)";
+                    self.names.insert(x_id, x_name);
+                    self.names.insert(y_id, y_name);
+                    
                     let joint = joints.get_mut(at).unwrap();
                     let point = self.points.get(at).unwrap();
 
