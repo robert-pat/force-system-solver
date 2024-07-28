@@ -10,7 +10,7 @@ a series of linear equations from the free-body diagrams of each joint in the tr
 matrix form and solved with linear algebra.
 
 These 'free-body diagrams' are represented in the TrussJoint2D structs, which are created in the ```Truss2D::condense()```
-method. These are turned into equations (and ultimately a matrix equation) in the ```build_equations()``` and ```solve_truss``` 
+method. These are turned into equations (and ultimately a matrix equation) in the ```build_equations()``` and ```solve_truss()``` 
 functions (found in ```solver.rs```).
 
 ## Creating a TOML file to solve a program
