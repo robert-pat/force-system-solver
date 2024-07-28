@@ -2,14 +2,15 @@
 use std::collections::BTreeMap;
 
 #[cfg(test)]
-use toml::Table;
-
-#[cfg(test)]
 use crate::parsing;
 #[cfg(test)]
 use crate::parsing::DebugInfo;
 #[cfg(test)]
 use crate::solver;
+#[cfg(test)]
+use toml::Table;
+
+// TODO: I should make test cases for solving & parsing at some point
 
 #[test]
 #[allow(non_snake_case)]
@@ -91,10 +92,4 @@ fn check_point_reading() -> Result<(), ()> {
         }
     }
     Ok(())
-}
-
-#[test]
-fn check_load_parsing() -> Result<(), ()> {
-    // we currently generate too many unknown forces is the solver somehow
-    todo!()
 }
