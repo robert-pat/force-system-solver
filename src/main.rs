@@ -9,6 +9,14 @@ mod parsing;
 mod solver;
 mod tests;
 
+#[derive(Debug, Default, PartialEq, Eq, Clone, Copy)]
+enum ForcedOutputMode {
+    #[default]
+    None,
+    Quiet,
+    Verbose,
+}
+
 /// Holds the different options for running force-system-solver.
 #[derive(Debug, Default)]
 struct CommandLineArguments {
@@ -17,7 +25,7 @@ struct CommandLineArguments {
     problem_path: Option<std::path::PathBuf>,
     display_result: bool,
     /// Whether to ignore existing settings and not print any extra debug information
-    silence_debug: bool, // TODO: convert to enum and allow forcing debug on
+    silence_debug: ForcedOutputMode,
     graphics_debug: bool,
 }
 impl CommandLineArguments {
@@ -42,8 +50,16 @@ impl CommandLineArguments {
                 "-e=2" => options.example = Some(include_str!(r"..\sample-problems\prob3.toml")),
                 "-e=3" => options.example = Some(include_str!(r"..\sample-problems\prob4.toml")),
                 "-g" => options.display_result = true,
-                "--quiet" | "-q" => options.silence_debug = true,
+                // TODO: what if user uses both -q and -v
+                "--quiet" | "-q" => options.silence_debug = ForcedOutputMode::Quiet,
+                "--verbose" | "-v" => options.silence_debug = ForcedOutputMode::Verbose,
                 "-gdbg" => options.graphics_debug = true,
+                "--help" | "-h" => {
+                    eprintln!("Usage: force-system-solver <path to file> <options>");
+                    eprintln!("Options:");
+                    eprintln!("--help: show help, -e: run example problem, -g: display graphics");
+                    eprintln!("--quiet: disable debug info, --verbose: enable debug info");
+                },
                 _ => {}
             }
         }
@@ -57,6 +73,14 @@ impl CommandLineArguments {
         }
         Ok(())
     }
+    fn override_debug(&self, table: &mut toml::Table) {
+        let output = match self.silence_debug {
+            ForcedOutputMode::Verbose => toml::Value::Boolean(true),
+            ForcedOutputMode::Quiet => toml::Value::Boolean(false),
+            ForcedOutputMode::None => return,
+        };
+        table.insert(String::from("debug"), output);
+    }
 
     /// Get a [toml::Table] for the truss to be solved. The returned table may come from the file
     /// system or a pre-written example problem. This function will ask the user to input a path
@@ -67,21 +91,13 @@ impl CommandLineArguments {
     fn get_toml_table(&self) -> Result<toml::Table, String> {
         if let Some(example) = self.example {
             let mut table = example.parse::<toml::Table>().unwrap();
-            if self.silence_debug {
-                if let Some(val) = table.get_mut("debug") {
-                    *val = toml::Value::Boolean(false)
-                }
-            }
+            self.override_debug(&mut table);
             return Ok(table);
         }
         if let Some(ref path) = self.problem_path {
             let file = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
             let mut table = file.parse::<toml::Table>().map_err(|e| e.to_string())?;
-            if self.silence_debug {
-                if let Some(val) = table.get_mut("debug") {
-                    *val = toml::Value::Boolean(false)
-                }
-            }
+            self.override_debug(&mut table);
             return Ok(table);
         }
         let path = ask_user_for_path();
@@ -94,11 +110,7 @@ impl CommandLineArguments {
         let mut table = file_text
             .parse::<toml::Table>()
             .map_err(|e| e.to_string())?;
-        if self.silence_debug {
-            if let Some(val) = table.get_mut("debug") {
-                *val = toml::Value::Boolean(false)
-            }
-        }
+        self.override_debug(&mut table);
         Ok(table)
     }
 }
