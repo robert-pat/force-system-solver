@@ -9,7 +9,7 @@ use nalgebra as na;
 
 use crate::parsing::DebugInfo;
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash, Default)]
 pub struct SolverID(u64);
 impl PartialOrd for SolverID {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
@@ -185,7 +185,7 @@ impl std::fmt::Display for Direction2D {
 /// This may be a known or unknown value and may have information about whether it is
 /// positive or negative. Vector components that are known positive or negative have additional
 /// information about their direction, while fully unknown components have no additional info.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub(crate) enum VectorComponent {
     /// This component of the vector is unknown and may be positive or negative
     Unknown,

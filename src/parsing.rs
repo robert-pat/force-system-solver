@@ -139,7 +139,7 @@ macro_rules! open_table {
 }
 /// An external support at a joint in the truss; support reactions with known directions, but
 /// unknown magnitudes. It may be a pin support or a roller.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) enum Support {
     Pin { at: SolverID },
     Roller { at: SolverID, dir: Direction2D },
@@ -423,7 +423,7 @@ type PointsResult = Result<HashMap<SolverID, Point2D>, ConversionError>;
 /// Attempt to convert the given [Value] into [Point2D]s, may fail with a
 /// [ConversionError] that contains more details. Any returned parsing errors are likely not
 /// recoverable, as they require modification to the input file.
-fn into_points(t: &Value, names: &mut HashMap<SolverID, String>) -> PointsResult {
+pub(crate) fn into_points(t: &Value, names: &mut HashMap<SolverID, String>) -> PointsResult {
     let table = open_array!(t, points_array)?;
     let mut points = HashMap::with_capacity(table.len());
 
@@ -486,7 +486,10 @@ fn into_points(t: &Value, names: &mut HashMap<SolverID, String>) -> PointsResult
 }
 
 type ConnectionsResult = Result<Vec<(SolverID, SolverID)>, ConversionError>;
-fn into_connections(t: &Value, names: &mut HashMap<SolverID, String>) -> ConnectionsResult {
+pub(crate) fn into_connections(
+    t: &Value,
+    names: &mut HashMap<SolverID, String>,
+) -> ConnectionsResult {
     let raw_connections = open_array!(t, truss_connections_table)?;
     let mut connections = Vec::with_capacity(raw_connections.len());
 
@@ -531,7 +534,7 @@ fn into_connections(t: &Value, names: &mut HashMap<SolverID, String>) -> Connect
 }
 
 type LoadsResult = Result<HashMap<SolverID, AppliedLoad>, ConversionError>;
-fn into_loads(t: &Value, names: &mut HashMap<SolverID, String>) -> LoadsResult {
+pub(crate) fn into_loads(t: &Value, names: &mut HashMap<SolverID, String>) -> LoadsResult {
     let raw_loads = open_array!(t, applied_loads_outer)?;
     let mut loads = HashMap::with_capacity(raw_loads.len());
     let mut counter = 1;
@@ -607,7 +610,7 @@ fn into_loads(t: &Value, names: &mut HashMap<SolverID, String>) -> LoadsResult {
 }
 
 type SupportsResult = Result<HashMap<SolverID, Support>, ConversionError>;
-fn into_supports(t: &Value, names: &mut HashMap<SolverID, String>) -> SupportsResult {
+pub(crate) fn into_supports(t: &Value, names: &mut HashMap<SolverID, String>) -> SupportsResult {
     let raw_supports = open_array!(t, supports_table_outer)?;
     let mut supports = HashMap::with_capacity(raw_supports.len());
 
