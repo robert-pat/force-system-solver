@@ -24,7 +24,7 @@ struct CommandLineArguments {
     example: Option<&'static str>,
     problem_path: Option<std::path::PathBuf>,
     display_result: bool,
-    /// Whether to ignore existing settings and not print any extra debug information
+    /// Override the setting for printing extra information (ignore what the file specifies)
     silence_debug: ForcedOutputMode,
     graphics_debug: bool,
 }
@@ -36,7 +36,7 @@ impl CommandLineArguments {
         if let Some(maybe_path) = args.get(1) {
             let path = std::path::PathBuf::from(maybe_path);
             let extension = Some(Some("toml"));
-            
+
             if path.exists() {
                 options.problem_path = Some(path);
             } else if extension == path.extension().map(|e| e.to_str()) {
@@ -61,7 +61,7 @@ impl CommandLineArguments {
                     eprintln!("Options:");
                     eprintln!("--help: show help, -e: run example problem, -g: display graphics");
                     eprintln!("--quiet: disable debug info, --verbose: enable debug info");
-                },
+                }
                 _ => {}
             }
         }

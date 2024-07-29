@@ -180,9 +180,9 @@ fn applied_load_reading() {
 fn supports_reading() {
     use crate::parsing::into_supports;
     use crate::parsing::Support;
-    use toml::Table;
     use crate::solver::{Direction2D, SolverID};
     use std::collections::HashMap;
+    use toml::Table;
 
     let file = r#"supports = [
         ["C", "Pin"],
