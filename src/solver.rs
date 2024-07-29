@@ -116,6 +116,7 @@ impl Point2D {
     pub(crate) fn pos(&self) -> (f64, f64) {
         (self.x, self.y)
     }
+    #[allow(dead_code)]
     pub(crate) fn is_valid(&self) -> bool {
         (self.x == 0f64 || self.x.is_normal()) && (self.y == 0f64 || self.y.is_normal())
     }
