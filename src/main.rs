@@ -35,10 +35,13 @@ impl CommandLineArguments {
 
         if let Some(maybe_path) = args.get(1) {
             let path = std::path::PathBuf::from(maybe_path);
+            let extension = Some(Some("toml"));
+            
             if path.exists() {
                 options.problem_path = Some(path);
+            } else if extension == path.extension().map(|e| e.to_str()) {
+                panic!("Could not find file: {path:?}");
             }
-            // TODO: difference between whether the path was invalid or not intended to be one
         }
 
         // need to double-check arg 1 b/c it might not be a path
@@ -50,7 +53,6 @@ impl CommandLineArguments {
                 "-e=2" => options.example = Some(include_str!(r"..\sample-problems\prob3.toml")),
                 "-e=3" => options.example = Some(include_str!(r"..\sample-problems\prob4.toml")),
                 "-g" => options.display_result = true,
-                // TODO: what if user uses both -q and -v
                 "--quiet" | "-q" => options.silence_debug = ForcedOutputMode::Quiet,
                 "--verbose" | "-v" => options.silence_debug = ForcedOutputMode::Verbose,
                 "-gdbg" => options.graphics_debug = true,
