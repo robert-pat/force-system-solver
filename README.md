@@ -28,6 +28,7 @@ really have any major plans for what this program will be, so yeah. So far I've 
  - Visualizing a truss 
  - Command line flags for different behavior
  - Rewrote the code to parse a truss (w/ arguably no difference in functionality)
+ - Ended up removing the old parsing code (so only the solver is what I originally submitted)
 
 #### Building & Running
 Exactly what you'd expect for a rust project. Assuming you have [rustup](https://www.rust-lang.org/tools/install),
