@@ -58,6 +58,15 @@ impl SolverID {
             }
         }
     }
+
+    /// Calculates the SolverID for the force/structural member p1<->p2 from the point names.
+    #[allow(unused)]
+    pub(crate) fn member_id_of(p1: &str, p2: &str) -> Self {
+        let s1 = SolverID::new(p1);
+        let s2 = SolverID::new(p2);
+
+        s1.concatenate(s2)
+    }
 }
 impl std::fmt::Display for SolverID {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
