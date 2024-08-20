@@ -230,10 +230,9 @@ fn supports_reading() {
 
 #[test]
 fn solve_example_one() {
+    use crate::parsing::DebugInfo;
     use crate::parsing::Truss2D;
     use crate::solver;
-    use crate::parsing::DebugInfo;
-
 
     let text = include_str!(r"..\sample-problems\problem-one.toml");
     let mut truss = Truss2D::new(&text.parse::<toml::Table>().unwrap()).unwrap();
@@ -249,20 +248,20 @@ fn solve_example_one() {
         const TOLER: f64 = 0.0000001;
 
         let res = results.iter().find(|f| f.force == id).unwrap();
-        assert!(val - TOLER <= res.value && res.value <= val + TOLER,
-                "Force {} had val {}, but expected {val}",
-                res.value,
-                res.force
+        assert!(
+            val - TOLER <= res.value && res.value <= val + TOLER,
+            "Force {} had val {}, but expected {val}",
+            res.value,
+            res.force
         );
     }
 }
 
 #[test]
 fn solve_example_two() {
+    use crate::parsing::DebugInfo;
     use crate::parsing::Truss2D;
     use crate::solver;
-    use crate::parsing::DebugInfo;
-
 
     let text = include_str!(r"..\sample-problems\prob3.toml");
     let mut truss = Truss2D::new(&text.parse::<toml::Table>().unwrap()).unwrap();
@@ -271,8 +270,8 @@ fn solve_example_two() {
     let expected = [
         (SolverID::member_id_of("A", "C"), -50.00000000),
         (SolverID::member_id_of("B", "C"), -70.71067812),
-        (SolverID::member_id_of("A", "D"), 70.71067812 ),
-        (SolverID::member_id_of("C", "D"), -50.00000000 ),
+        (SolverID::member_id_of("A", "D"), 70.71067812),
+        (SolverID::member_id_of("C", "D"), -50.00000000),
         (SolverID::member_id_of("B", "A"), 50.0),
     ];
 
@@ -280,10 +279,11 @@ fn solve_example_two() {
         const TOLER: f64 = 0.0000001;
 
         let res = results.iter().find(|f| f.force == id).unwrap();
-        assert!(val - TOLER <= res.value && res.value <= val + TOLER,
-                "Force {} had val {}, but expected {val}",
-                res.value,
-                res.force
+        assert!(
+            val - TOLER <= res.value && res.value <= val + TOLER,
+            "Force {} had val {}, but expected {val}",
+            res.value,
+            res.force
         );
     }
 }

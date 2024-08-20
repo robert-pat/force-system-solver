@@ -299,8 +299,6 @@ impl Truss2D {
                     let x_id = id.concatenate(SolverID::new("x"));
                     let y_id = id.concatenate(SolverID::new("y"));
 
-                    // TODO: this solution could leak memory in the names HashMap if this pin gets
-                    //  deleted
                     let pin_name = self.names.get(id).unwrap();
                     let x_name = pin_name.clone() + " (x component)";
                     let y_name = pin_name.clone() + " (y component)";
