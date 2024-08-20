@@ -33,7 +33,7 @@ impl CommandLineArguments {
         let mut options = CommandLineArguments::default();
         let args = std::env::args().collect_vec();
 
-        if let Some(maybe_path) = args.get(1) {
+        if let Some(maybe_path) = args.last() {
             let path = std::path::PathBuf::from(maybe_path);
             let extension = Some(Some("toml"));
 

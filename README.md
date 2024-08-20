@@ -4,6 +4,16 @@ and solve for the force each member is under. In the time since submitting, I've
 fair ammount, and the current version is somewhat different than the original submission. Please see the 
 tagged commits for the versions that I originally submitted.
 
+## Using the Program:
+This program takes in a .toml file describing a 2d truss in static equilibrium. It will then solve for unknown forces
+and display the results (either in the terminal or to a text file). This program is intended to be invoked & run from
+the command line, as such it supports a few command-line options:
+- The last item is optionally a path to a .toml file to solve
+- '--quiet' will disable debug output information
+- '-v' or '--verbose' will enable debug output information
+- '-e' or '-e=<1, 2, or 3>' will display an example problem
+- '-g' will display a simple drawing of the truss, its supports, and the applied loading.
+
 ## Solver Expectations & Solving Strategy:
 This project uses the method of joints to solve a two-dimensional truss in static equilibrium. Conceptually it creates 
 a series of linear equations from the free-body diagrams of each joint in the truss. These equations are then combined into 
